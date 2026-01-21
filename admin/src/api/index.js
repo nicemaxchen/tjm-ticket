@@ -61,5 +61,6 @@ export const adminApi = {
   rejectPending: (id, data) => api.post(`/admin/pending-list/${id}/reject`, data),
   
   // 統計
-  getStatistics: (eventId) => api.get('/admin/statistics', { params: { event_id: eventId } })
+  getStatistics: (eventId) => api.get('/admin/statistics', { params: { event_id: eventId } }),
+  getStatisticsByEvents: () => api.get('/admin/statistics/by-events')
 };

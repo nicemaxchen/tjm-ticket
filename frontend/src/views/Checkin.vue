@@ -20,6 +20,9 @@
               <el-descriptions-item label="活動名稱">
                 {{ ticket.event_name }}
               </el-descriptions-item>
+              <el-descriptions-item label="活動地點" v-if="ticket.event_location">
+                {{ ticket.event_location }}
+              </el-descriptions-item>
               <el-descriptions-item label="票券條碼">
                 {{ ticket.barcode }}
               </el-descriptions-item>

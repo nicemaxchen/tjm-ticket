@@ -11,6 +11,12 @@
       <el-table :data="events" border style="width: 100%">
         <el-table-column prop="name" label="活動名稱" width="200" />
         <el-table-column prop="description" label="描述" />
+        <el-table-column prop="location" label="活動地點" width="150" />
+        <el-table-column prop="max_attendees" label="索票最大人數" width="130">
+          <template #default="{ row }">
+            {{ row.max_attendees > 0 ? row.max_attendees : '無限制' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="event_date" label="活動日期" width="180">
           <template #default="{ row }">
             {{ formatDate(row.event_date) }}
@@ -69,6 +75,21 @@
             placeholder="選擇活動日期時間"
             style="width: 100%"
           />
+        </el-form-item>
+
+        <el-form-item label="活動地點" prop="location">
+          <el-input v-model="form.location" placeholder="請輸入活動地點" />
+        </el-form-item>
+
+        <el-form-item label="活動索票最大人數" prop="max_attendees">
+          <el-input-number
+            v-model="form.max_attendees"
+            :min="0"
+            :step="1"
+            placeholder="0表示無限制"
+            style="width: 100%"
+          />
+          <div class="form-tip">0表示無限制</div>
         </el-form-item>
 
         <el-form-item label="開放取票時間起" prop="ticket_collection_start">
@@ -135,6 +156,8 @@ const form = reactive({
   name: '',
   description: '',
   event_date: null,
+  location: '',
+  max_attendees: 0,
   ticket_collection_start: null,
   ticket_collection_end: null,
   checkin_start: null,
@@ -173,6 +196,8 @@ const handleEdit = (row) => {
     name: row.name,
     description: row.description || '',
     event_date: row.event_date ? new Date(row.event_date) : null,
+    location: row.location || '',
+    max_attendees: row.max_attendees || 0,
     ticket_collection_start: row.ticket_collection_start ? new Date(row.ticket_collection_start) : null,
     ticket_collection_end: row.ticket_collection_end ? new Date(row.ticket_collection_end) : null,
     checkin_start: row.checkin_start ? new Date(row.checkin_start) : null,
@@ -204,14 +229,25 @@ const submitForm = async () => {
     if (!valid) return;
 
     try {
+      // 確保 max_attendees 是數字類型
+      const maxAttendees = form.max_attendees !== null && form.max_attendees !== undefined 
+        ? Number(form.max_attendees) 
+        : 0;
+      
       const data = {
-        ...form,
+        name: form.name,
+        description: form.description || '',
         event_date: form.event_date ? form.event_date.toISOString() : null,
+        location: String(form.location || ''),
+        max_attendees: maxAttendees,
         ticket_collection_start: form.ticket_collection_start ? form.ticket_collection_start.toISOString() : null,
         ticket_collection_end: form.ticket_collection_end ? form.ticket_collection_end.toISOString() : null,
         checkin_start: form.checkin_start ? form.checkin_start.toISOString() : null,
-        checkin_end: form.checkin_end ? form.checkin_end.toISOString() : null
+        checkin_end: form.checkin_end ? form.checkin_end.toISOString() : null,
+        allow_web_collection: form.allow_web_collection || false
       };
+
+      console.log('提交的數據:', data); // 調試用
 
       if (editingId.value) {
         await adminApi.updateEvent(editingId.value, data);
@@ -224,6 +260,7 @@ const submitForm = async () => {
       showDialog.value = false;
       await loadEvents();
     } catch (error) {
+      console.error('提交錯誤:', error); // 調試用
       ElMessage.error(error.message || '操作失敗');
     }
   });
@@ -234,6 +271,8 @@ const resetForm = () => {
     name: '',
     description: '',
     event_date: null,
+    location: '',
+    max_attendees: 0,
     ticket_collection_start: null,
     ticket_collection_end: null,
     checkin_start: null,
@@ -259,5 +298,11 @@ const formatDate = (dateString) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
 }
 </style>

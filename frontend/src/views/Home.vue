@@ -36,6 +36,12 @@
           <el-card>
             <h4>{{ event.name }}</h4>
             <p>{{ event.description }}</p>
+            <p v-if="event.location" style="color: #666; margin-top: 8px;">
+              <el-icon :size="16" style="vertical-align: middle; margin-right: 4px;"><Location /></el-icon>{{ event.location }}
+            </p>
+            <p v-if="event.max_attendees > 0" style="color: #666; margin-top: 8px;">
+              <el-icon :size="16" style="vertical-align: middle; margin-right: 4px;"><User /></el-icon>索票最大人數：{{ event.max_attendees }} 人
+            </p>
           </el-card>
         </el-timeline-item>
       </el-timeline>
@@ -45,7 +51,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { Search, Edit } from '@element-plus/icons-vue';
+import { Search, Edit, Location, User } from '@element-plus/icons-vue';
 import { ticketApi } from '../api';
 
 const events = ref([]);

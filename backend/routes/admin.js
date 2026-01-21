@@ -32,7 +32,9 @@ router.post('/events', async (req, res) => {
       ticket_collection_end,
       checkin_start,
       checkin_end,
-      allow_web_collection = false
+      allow_web_collection = false,
+      max_attendees = 0,
+      location = ''
     } = req.body;
 
     if (!name) {
@@ -42,12 +44,13 @@ router.post('/events', async (req, res) => {
     const result = await dbRun(
       `INSERT INTO events 
        (name, description, event_date, ticket_collection_start, 
-        ticket_collection_end, checkin_start, checkin_end, allow_web_collection)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ticket_collection_end, checkin_start, checkin_end, allow_web_collection,
+        max_attendees, location)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name, description, event_date, ticket_collection_start,
         ticket_collection_end, checkin_start, checkin_end, 
-        allow_web_collection ? 1 : 0
+        allow_web_collection ? 1 : 0, max_attendees || 0, location || ''
       ]
     );
 
@@ -76,19 +79,32 @@ router.put('/events/:id', async (req, res) => {
       ticket_collection_end,
       checkin_start,
       checkin_end,
-      allow_web_collection
+      allow_web_collection,
+      max_attendees,
+      location
     } = req.body;
+
+    // 確保資料類型正確
+    const maxAttendees = max_attendees !== null && max_attendees !== undefined 
+      ? Number(max_attendees) 
+      : 0;
+    const eventLocation = location !== null && location !== undefined 
+      ? String(location) 
+      : '';
+
+    console.log('更新活動數據:', { id, max_attendees: maxAttendees, location: eventLocation }); // 調試用
 
     await dbRun(
       `UPDATE events 
        SET name = ?, description = ?, event_date = ?, 
            ticket_collection_start = ?, ticket_collection_end = ?,
-           checkin_start = ?, checkin_end = ?, allow_web_collection = ?
+           checkin_start = ?, checkin_end = ?, allow_web_collection = ?,
+           max_attendees = ?, location = ?
        WHERE id = ?`,
       [
         name, description, event_date, ticket_collection_start,
         ticket_collection_end, checkin_start, checkin_end,
-        allow_web_collection ? 1 : 0, id
+        allow_web_collection ? 1 : 0, maxAttendees, eventLocation, id
       ]
     );
 
@@ -313,24 +329,56 @@ router.get('/statistics', async (req, res) => {
     const { event_id } = req.query;
 
     let tickets;
+    let max_attendees = 0;
+    let pendingCount = 0;
+
     if (event_id) {
       tickets = await dbAll(
-        `SELECT t.*, tc.name as category_name, e.name as event_name
+        `SELECT t.*, tc.name as category_name, e.name as event_name, e.max_attendees,
+                COALESCE(u.name, pl.name) as user_name,
+                COALESCE(u.email, pl.email) as email,
+                COALESCE(r.created_at, pl.created_at) as registration_time
          FROM tickets t
          JOIN ticket_categories tc ON t.ticket_category_id = tc.id
          JOIN events e ON t.event_id = e.id
+         LEFT JOIN users u ON t.user_id = u.id
+         LEFT JOIN registrations r ON t.registration_id = r.id
+         LEFT JOIN pending_list pl ON r.id = pl.registration_id
          WHERE t.event_id = ?
          ORDER BY t.created_at DESC`,
         [event_id]
       );
+      
+      // 取得活動的票數上限
+      const event = await dbGet('SELECT max_attendees FROM events WHERE id = ?', [event_id]);
+      max_attendees = event ? (event.max_attendees || 0) : 0;
+      
+      // 取得該活動的待審核數
+      const pendingCountResult = await dbGet(
+        `SELECT COUNT(*) as count FROM pending_list WHERE event_id = ? AND status = 'pending'`,
+        [event_id]
+      );
+      pendingCount = pendingCountResult ? (pendingCountResult.count || 0) : 0;
     } else {
       tickets = await dbAll(
-        `SELECT t.*, tc.name as category_name, e.name as event_name
+        `SELECT t.*, tc.name as category_name, e.name as event_name, e.max_attendees,
+                COALESCE(u.name, pl.name) as user_name,
+                COALESCE(u.email, pl.email) as email,
+                COALESCE(r.created_at, pl.created_at) as registration_time
          FROM tickets t
          JOIN ticket_categories tc ON t.ticket_category_id = tc.id
          JOIN events e ON t.event_id = e.id
+         LEFT JOIN users u ON t.user_id = u.id
+         LEFT JOIN registrations r ON t.registration_id = r.id
+         LEFT JOIN pending_list pl ON r.id = pl.registration_id
          ORDER BY t.created_at DESC`
       );
+      
+      // 取得所有待審核數
+      const pendingCountResult = await dbGet(
+        `SELECT COUNT(*) as count FROM pending_list WHERE status = 'pending'`
+      );
+      pendingCount = pendingCountResult ? (pendingCountResult.count || 0) : 0;
     }
 
     // 統計資訊
@@ -343,12 +391,57 @@ router.get('/statistics', async (req, res) => {
       statistics: {
         total,
         checked,
-        unchecked
+        unchecked,
+        max_attendees,
+        pendingCount
       },
       tickets
     });
   } catch (error) {
     console.error('取得統計資訊錯誤:', error);
+    res.status(500).json({ error: '取得失敗' });
+  }
+});
+
+// 取得所有活動的統計資訊（用於儀表板）
+router.get('/statistics/by-events', async (req, res) => {
+  try {
+    const events = await dbAll('SELECT * FROM events ORDER BY event_date DESC');
+    
+    const eventStats = await Promise.all(events.map(async (event) => {
+      const tickets = await dbAll(
+        `SELECT * FROM tickets WHERE event_id = ?`,
+        [event.id]
+      );
+      
+      const pendingCountResult = await dbGet(
+        `SELECT COUNT(*) as count FROM pending_list WHERE event_id = ? AND status = 'pending'`,
+        [event.id]
+      );
+
+      const total = tickets.length;
+      const checked = tickets.filter(t => t.checkin_status === 'checked').length;
+      const unchecked = total - checked;
+      const pendingCount = pendingCountResult ? (pendingCountResult.count || 0) : 0;
+
+      return {
+        event_id: event.id,
+        event_name: event.name,
+        event_date: event.event_date,
+        max_attendees: event.max_attendees || 0,
+        totalTickets: total,
+        checkedTickets: checked,
+        uncheckedTickets: unchecked,
+        pendingCount: pendingCount
+      };
+    }));
+
+    res.json({
+      success: true,
+      eventStats
+    });
+  } catch (error) {
+    console.error('取得活動統計資訊錯誤:', error);
     res.status(500).json({ error: '取得失敗' });
   }
 });

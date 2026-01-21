@@ -12,6 +12,9 @@
         <el-descriptions-item label="活動日期">
           {{ formatDate(ticket.event_date) }}
         </el-descriptions-item>
+        <el-descriptions-item label="活動地點" v-if="ticket.event_location">
+          {{ ticket.event_location }}
+        </el-descriptions-item>
         <el-descriptions-item label="票券類別">
           {{ ticket.category_name }}
         </el-descriptions-item>

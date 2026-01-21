@@ -28,8 +28,9 @@ export async function seedDatabase() {
       const eventResult = await dbRun(
         `INSERT INTO events 
          (name, description, event_date, ticket_collection_start, 
-          ticket_collection_end, checkin_start, checkin_end, allow_web_collection)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          ticket_collection_end, checkin_start, checkin_end, allow_web_collection,
+          max_attendees, location)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           '範例活動',
           '這是一個範例活動，用於測試系統功能',
@@ -38,7 +39,9 @@ export async function seedDatabase() {
           collectionEnd.toISOString(),
           new Date(eventDate.getTime() - 1 * 60 * 60 * 1000).toISOString(), // 活動前1小時開始報到
           eventDate.toISOString(),
-          1 // 允許Web取票
+          1, // 允許Web取票
+          100, // 活動索票最大人數
+          '台北國際會議中心' // 活動地點
         ]
       );
       

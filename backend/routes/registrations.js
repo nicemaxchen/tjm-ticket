@@ -15,7 +15,7 @@ router.post('/query', async (req, res) => {
 
     // 查詢該手機號下的所有已報名票券
     const tickets = await dbAll(
-      `SELECT t.*, e.name as event_name, e.event_date, 
+      `SELECT t.*, e.name as event_name, e.event_date, e.location as event_location,
               tc.name as category_name,
               u.name as user_name, u.email
        FROM tickets t
@@ -233,6 +233,7 @@ router.get('/ticket/:tokenId', async (req, res) => {
 
     const ticket = await dbGet(
       `SELECT t.*, e.name as event_name, e.event_date, e.checkin_start, e.checkin_end,
+              e.location as event_location, e.max_attendees,
               tc.name as category_name,
               u.name as user_name, u.email, u.phone
        FROM tickets t

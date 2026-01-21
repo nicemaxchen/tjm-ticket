@@ -80,6 +80,8 @@ export function initDatabase() {
       checkin_start DATETIME,
       checkin_end DATETIME,
       allow_web_collection BOOLEAN DEFAULT 0,
+      max_attendees INTEGER DEFAULT 0,
+      location TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     
@@ -180,6 +182,19 @@ export function initDatabase() {
         console.error('❌ Index creation error:', err);
       }
     });
+  });
+
+  // 檢查並添加新欄位（用於已存在的資料庫）
+  db.run(`ALTER TABLE events ADD COLUMN max_attendees INTEGER DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add max_attendees column error:', err);
+    }
+  });
+
+  db.run(`ALTER TABLE events ADD COLUMN location TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add location column error:', err);
+    }
   });
 
   console.log('✅ Database tables initialized');

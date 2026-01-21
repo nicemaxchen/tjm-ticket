@@ -46,6 +46,7 @@
 
         <el-table :data="tickets" border>
           <el-table-column prop="event_name" label="活動名稱" width="200" />
+          <el-table-column prop="event_location" label="活動地點" width="150" />
           <el-table-column prop="category_name" label="票券類別" width="150" />
           <el-table-column prop="barcode" label="條碼" width="180" />
           <el-table-column prop="checkin_status" label="報到狀態" width="120">
@@ -86,6 +87,9 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="活動名稱">
             {{ selectedTicket.event_name }}
+          </el-descriptions-item>
+          <el-descriptions-item label="活動地點" v-if="selectedTicket.event_location">
+            {{ selectedTicket.event_location }}
           </el-descriptions-item>
           <el-descriptions-item label="票券類別">
             {{ selectedTicket.category_name }}
