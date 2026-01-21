@@ -16,8 +16,8 @@ router.get('/events', async (req, res) => {
       events: events || []
     });
   } catch (error) {
-    console.error('取得活動列表错误:', error);
-    res.status(500).json({ error: '取得失败' });
+    console.error('取得活動列表錯誤:', error);
+    res.status(500).json({ error: '取得失敗' });
   }
 });
 
@@ -36,7 +36,7 @@ router.post('/events', async (req, res) => {
     } = req.body;
 
     if (!name) {
-      return res.status(400).json({ error: '活動名称不能為空' });
+      return res.status(400).json({ error: '活動名稱不能為空' });
     }
 
     const result = await dbRun(
@@ -59,8 +59,8 @@ router.post('/events', async (req, res) => {
       event
     });
   } catch (error) {
-    console.error('建立活動错误:', error);
-    res.status(500).json({ error: '建立失败' });
+    console.error('建立活動錯誤:', error);
+    res.status(500).json({ error: '建立失敗' });
   }
 });
 
@@ -100,7 +100,7 @@ router.put('/events/:id', async (req, res) => {
       event
     });
   } catch (error) {
-    console.error('更新活動错误:', error);
+    console.error('更新活動錯誤:', error);
     res.status(500).json({ error: '更新失敗' });
   }
 });
@@ -117,8 +117,8 @@ router.get('/categories', async (req, res) => {
       categories: categories || []
     });
   } catch (error) {
-    console.error('取得票券類別错误:', error);
-    res.status(500).json({ error: '取得失败' });
+    console.error('取得票券類別錯誤:', error);
+    res.status(500).json({ error: '取得失敗' });
   }
 });
 
@@ -152,8 +152,8 @@ router.post('/categories', async (req, res) => {
       category
     });
   } catch (error) {
-    console.error('建立票券類別错误:', error);
-    res.status(500).json({ error: '建立失败' });
+    console.error('建立票券類別錯誤:', error);
+    res.status(500).json({ error: '建立失敗' });
   }
 });
 
@@ -185,7 +185,7 @@ router.put('/categories/:id', async (req, res) => {
       category
     });
   } catch (error) {
-    console.error('更新票券類別错误:', error);
+    console.error('更新票券類別錯誤:', error);
     res.status(500).json({ error: '更新失敗' });
   }
 });
@@ -207,12 +207,12 @@ router.get('/pending-list', async (req, res) => {
       pendingList: pendingList || []
     });
   } catch (error) {
-    console.error('取得待審核名單错误:', error);
-    res.status(500).json({ error: '取得失败' });
+    console.error('取得待審核名單錯誤:', error);
+    res.status(500).json({ error: '取得失敗' });
   }
 });
 
-// 審核通过並開票
+// 審核通過並開票
 router.post('/pending-list/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
@@ -226,7 +226,7 @@ router.post('/pending-list/:id/approve', async (req, res) => {
     }
 
     if (pending.status !== 'pending') {
-      return res.status(400).json({ error: '该記錄已處理' });
+      return res.status(400).json({ error: '該記錄已處理' });
     }
 
     // 建立票券
@@ -244,13 +244,13 @@ router.post('/pending-list/:id/approve', async (req, res) => {
       ]
     );
 
-    // 更新報名状态
+    // 更新報名狀態
     await dbRun(
       'UPDATE registrations SET status = ? WHERE id = ?',
       ['confirmed', pending.registration_id]
     );
 
-    // 更新待審核名單状态
+    // 更新待審核名單狀態
     await dbRun(
       `UPDATE pending_list 
        SET status = ?, reviewed_by = ?, reviewed_at = ?, admin_notes = ?
@@ -262,12 +262,12 @@ router.post('/pending-list/:id/approve', async (req, res) => {
 
     res.json({
       success: true,
-      message: '審核通过，票券已產生',
+      message: '審核通過，票券已產生',
       ticket
     });
   } catch (error) {
-    console.error('審核开票错误:', error);
-    res.status(500).json({ error: '審核失败' });
+    console.error('審核開票錯誤:', error);
+    res.status(500).json({ error: '審核失敗' });
   }
 });
 
@@ -283,7 +283,7 @@ router.post('/pending-list/:id/reject', async (req, res) => {
       return res.status(404).json({ error: '記錄不存在' });
     }
 
-    // 更新待審核名單状态
+    // 更新待審核名單狀態
     await dbRun(
       `UPDATE pending_list 
        SET status = ?, reviewed_by = ?, reviewed_at = ?, admin_notes = ?
@@ -291,7 +291,7 @@ router.post('/pending-list/:id/reject', async (req, res) => {
       ['rejected', admin_id, new Date().toISOString(), admin_notes, id]
     );
 
-    // 更新報名状态
+    // 更新報名狀態
     await dbRun(
       'UPDATE registrations SET status = ? WHERE id = ?',
       ['rejected', pending.registration_id]
@@ -302,12 +302,12 @@ router.post('/pending-list/:id/reject', async (req, res) => {
       message: '審核已拒絕'
     });
   } catch (error) {
-    console.error('審核拒绝错误:', error);
+    console.error('審核拒绝錯誤:', error);
     res.status(500).json({ error: '操作失敗' });
   }
 });
 
-// 取得票券统计
+// 取得票券統計
 router.get('/statistics', async (req, res) => {
   try {
     const { event_id } = req.query;
@@ -348,8 +348,8 @@ router.get('/statistics', async (req, res) => {
       tickets
     });
   } catch (error) {
-    console.error('取得統計資訊错误:', error);
-    res.status(500).json({ error: '取得失败' });
+    console.error('取得統計資訊錯誤:', error);
+    res.status(500).json({ error: '取得失敗' });
   }
 });
 

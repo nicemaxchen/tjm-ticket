@@ -2,7 +2,7 @@
   <div class="checkin">
     <el-card>
       <template #header>
-        <span>扫码报到</span>
+        <span>掃碼報到</span>
       </template>
 
       <div v-if="loading">
@@ -12,20 +12,20 @@
       <div v-else-if="ticket">
         <el-result
           :icon="ticket.checkin_status === 'checked' ? 'success' : 'info'"
-          :title="ticket.checkin_status === 'checked' ? '已报到' : '未报到'"
-          :sub-title="ticket.checkin_status === 'checked' ? '您已完成报到' : '点击下方按钮进行报到'"
+          :title="ticket.checkin_status === 'checked' ? '已報到' : '未報到'"
+          :sub-title="ticket.checkin_status === 'checked' ? '您已完成報到' : '點擊下方按鈕進行報到'"
         >
           <template #extra>
             <el-descriptions :column="1" border style="margin: 20px 0;">
-              <el-descriptions-item label="活动名称">
+              <el-descriptions-item label="活動名稱">
                 {{ ticket.event_name }}
               </el-descriptions-item>
-              <el-descriptions-item label="票券条码">
+              <el-descriptions-item label="票券條碼">
                 {{ ticket.barcode }}
               </el-descriptions-item>
-              <el-descriptions-item label="报到状态">
+              <el-descriptions-item label="報到狀態">
                 <el-tag :type="ticket.checkin_status === 'checked' ? 'success' : 'info'">
-                  {{ ticket.checkin_status === 'checked' ? '已报到' : '未报到' }}
+                  {{ ticket.checkin_status === 'checked' ? '已報到' : '未報到' }}
                 </el-tag>
               </el-descriptions-item>
             </el-descriptions>
@@ -36,7 +36,7 @@
               size="large"
               @click="handleCheckin"
             >
-              确认报到
+              確認報到
             </el-button>
           </template>
         </el-result>
@@ -63,7 +63,7 @@ onMounted(async () => {
     const result = await registrationApi.getTicket(tokenId);
     ticket.value = result.ticket;
   } catch (error) {
-    ElMessage.error(error.message || '获取票券详情失败');
+    ElMessage.error(error.message || '取得票券詳情失敗');
   } finally {
     loading.value = false;
   }
@@ -71,8 +71,8 @@ onMounted(async () => {
 
 const handleCheckin = async () => {
   try {
-    await ElMessageBox.confirm('确认进行报到吗？', '报到确认', {
-      confirmButtonText: '确认',
+    await ElMessageBox.confirm('確認進行報到嗎？', '報到確認', {
+      confirmButtonText: '確認',
       cancelButtonText: '取消',
       type: 'info'
     });
@@ -83,14 +83,14 @@ const handleCheckin = async () => {
     });
 
     if (result.success) {
-      ElMessage.success('报到成功！');
-      // 重新加载票券信息
+      ElMessage.success('報到成功！');
+      // 重新載入票券資訊
       const result2 = await registrationApi.getTicket(ticket.value.token_id);
       ticket.value = result2.ticket;
     }
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '报到失败');
+      ElMessage.error(error.message || '報到失敗');
     }
   }
 };

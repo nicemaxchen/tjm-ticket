@@ -2,21 +2,21 @@
   <el-container class="app-container">
     <el-header class="app-header">
       <div class="header-content">
-        <h1>TJM 票券系统 - 后台管理</h1>
+        <h1>TJM 票券系統 - 後台管理</h1>
         <el-menu
           mode="horizontal"
           :default-active="$route.path"
           router
           class="header-menu"
         >
-          <el-menu-item index="/dashboard">仪表板</el-menu-item>
-          <el-menu-item index="/events">活动管理</el-menu-item>
-          <el-menu-item index="/categories">票券类别</el-menu-item>
-          <el-menu-item index="/pending">待审核名单</el-menu-item>
-          <el-menu-item index="/statistics">统计分析</el-menu-item>
+          <el-menu-item index="/dashboard">儀表板</el-menu-item>
+          <el-menu-item index="/events">活動管理</el-menu-item>
+          <el-menu-item index="/categories">票券類別</el-menu-item>
+          <el-menu-item index="/pending">待審核名單</el-menu-item>
+          <el-menu-item index="/statistics">統計分析</el-menu-item>
         </el-menu>
         <el-button @click="handleLogout" type="danger" size="small">
-          退出登录
+          登出
         </el-button>
       </div>
     </el-header>
@@ -34,8 +34,8 @@ const router = useRouter();
 
 const handleLogout = async () => {
   try {
-    await ElMessageBox.confirm('确认退出登录吗？', '提示', {
-      confirmButtonText: '确认',
+    await ElMessageBox.confirm('確認登出嗎？', '提示', {
+      confirmButtonText: '確認',
       cancelButtonText: '取消',
       type: 'warning'
     });

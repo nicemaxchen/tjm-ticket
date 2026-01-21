@@ -3,7 +3,7 @@
     <el-card class="login-card">
       <template #header>
         <div class="card-header">
-          <h2>后台管理系统</h2>
+          <h2>後台管理系統</h2>
         </div>
       </template>
 
@@ -13,19 +13,19 @@
         ref="formRef"
         label-width="80px"
       >
-        <el-form-item label="用户名" prop="username">
+        <el-form-item label="使用者名稱" prop="username">
           <el-input
             v-model="form.username"
-            placeholder="请输入用户名"
+            placeholder="請輸入使用者名稱"
             :prefix-icon="User"
           />
         </el-form-item>
 
-        <el-form-item label="密码" prop="password">
+        <el-form-item label="密碼" prop="password">
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="请输入密码"
+            placeholder="請輸入密碼"
             :prefix-icon="Lock"
             @keyup.enter="handleLogin"
           />
@@ -38,7 +38,7 @@
             :loading="loading"
             @click="handleLogin"
           >
-            登录
+            登入
           </el-button>
         </el-form-item>
       </el-form>
@@ -63,8 +63,8 @@ const form = reactive({
 });
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+  username: [{ required: true, message: '請輸入使用者名稱', trigger: 'blur' }],
+  password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }]
 };
 
 const handleLogin = async () => {
@@ -80,10 +80,10 @@ const handleLogin = async () => {
       localStorage.setItem('adminToken', result.token);
       localStorage.setItem('adminInfo', JSON.stringify(result.admin));
       
-      ElMessage.success('登录成功');
+      ElMessage.success('登入成功');
       router.push('/dashboard');
     } catch (error) {
-      ElMessage.error(error.message || '登录失败');
+      ElMessage.error(error.message || '登入失敗');
     } finally {
       loading.value = false;
     }

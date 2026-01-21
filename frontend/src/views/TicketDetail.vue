@@ -2,39 +2,39 @@
   <div class="ticket-detail">
     <el-card v-if="ticket">
       <template #header>
-        <span>票券详情</span>
+        <span>票券詳情</span>
       </template>
 
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="活动名称">
+        <el-descriptions-item label="活動名稱">
           {{ ticket.event_name }}
         </el-descriptions-item>
-        <el-descriptions-item label="活动日期">
+        <el-descriptions-item label="活動日期">
           {{ formatDate(ticket.event_date) }}
         </el-descriptions-item>
-        <el-descriptions-item label="票券类别">
+        <el-descriptions-item label="票券類別">
           {{ ticket.category_name }}
         </el-descriptions-item>
         <el-descriptions-item label="姓名">
           {{ ticket.user_name || '-' }}
         </el-descriptions-item>
-        <el-descriptions-item label="手机号">
+        <el-descriptions-item label="手機號">
           {{ ticket.phone }}
         </el-descriptions-item>
-        <el-descriptions-item label="票券条码">
+        <el-descriptions-item label="票券條碼">
           <el-text copyable style="font-size: 18px; font-weight: bold;">
             {{ ticket.barcode }}
           </el-text>
         </el-descriptions-item>
-        <el-descriptions-item label="报到状态">
+        <el-descriptions-item label="報到狀態">
           <el-tag :type="ticket.checkin_status === 'checked' ? 'success' : 'info'">
-            {{ ticket.checkin_status === 'checked' ? '已报到' : '未报到' }}
+            {{ ticket.checkin_status === 'checked' ? '已報到' : '未報到' }}
           </el-tag>
         </el-descriptions-item>
       </el-descriptions>
 
       <div class="barcode-section">
-        <h3>报到条码</h3>
+        <h3>報到條碼</h3>
         <div class="barcode-display">
           <el-text style="font-size: 32px; font-weight: bold; letter-spacing: 4px;">
             {{ ticket.barcode }}
@@ -44,12 +44,12 @@
 
       <div class="actions" v-if="ticket.checkin_status === 'unchecked'">
         <el-button type="success" size="large" @click="handleCheckin">
-          扫码报到
+          掃碼報到
         </el-button>
       </div>
     </el-card>
 
-    <el-empty v-else description="票券不存在或加载中..." />
+    <el-empty v-else description="票券不存在或載入中..." />
   </div>
 </template>
 
@@ -69,14 +69,14 @@ onMounted(async () => {
     const result = await registrationApi.getTicket(tokenId);
     ticket.value = result.ticket;
   } catch (error) {
-    ElMessage.error(error.message || '获取票券详情失败');
+    ElMessage.error(error.message || '取得票券詳情失敗');
   }
 });
 
 const handleCheckin = async () => {
   try {
-    await ElMessageBox.confirm('确认进行报到吗？', '报到确认', {
-      confirmButtonText: '确认',
+    await ElMessageBox.confirm('確認進行報到嗎？', '報到確認', {
+      confirmButtonText: '確認',
       cancelButtonText: '取消',
       type: 'info'
     });
@@ -87,14 +87,14 @@ const handleCheckin = async () => {
     });
 
     if (result.success) {
-      ElMessage.success('报到成功！');
-      // 重新加载票券信息
+      ElMessage.success('報到成功！');
+      // 重新載入票券資訊
       const result2 = await registrationApi.getTicket(ticket.value.token_id);
       ticket.value = result2.ticket;
     }
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '报到失败');
+      ElMessage.error(error.message || '報到失敗');
     }
   }
 };

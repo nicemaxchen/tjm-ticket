@@ -8,7 +8,7 @@ import router from './router';
 
 const app = createApp(App);
 
-// 注册Element Plus图标
+// 註冊Element Plus图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component);
 }

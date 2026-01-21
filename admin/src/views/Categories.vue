@@ -3,25 +3,25 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>票券类别管理</span>
-          <el-button type="primary" @click="handleCreate">新增类别</el-button>
+          <span>票券類別管理</span>
+          <el-button type="primary" @click="handleCreate">新增類別</el-button>
         </div>
       </template>
 
       <el-table :data="categories" border style="width: 100%">
-        <el-table-column prop="name" label="类别名称" width="200" />
+        <el-table-column prop="name" label="類別名稱" width="200" />
         <el-table-column prop="description" label="描述" />
-        <el-table-column prop="total_limit" label="总限额" width="100">
+        <el-table-column prop="total_limit" label="總限額" width="100">
           <template #default="{ row }">
-            {{ row.total_limit || '无限制' }}
+            {{ row.total_limit || '無限制' }}
           </template>
         </el-table-column>
-        <el-table-column prop="daily_limit" label="每日限额" width="100">
+        <el-table-column prop="daily_limit" label="每日限額" width="100">
           <template #default="{ row }">
-            {{ row.daily_limit || '无限制' }}
+            {{ row.daily_limit || '無限制' }}
           </template>
         </el-table-column>
-        <el-table-column prop="per_phone_limit" label="每手机号限额" width="120">
+        <el-table-column prop="per_phone_limit" label="每手機號限額" width="120">
           <template #default="{ row }">
             {{ row.per_phone_limit || 1 }}
           </template>
@@ -29,17 +29,17 @@
         <el-table-column label="操作" width="200">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">
-              编辑
+              編輯
             </el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">
-              删除
+              刪除
             </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <!-- 类别编辑对话框 -->
+    <!-- 類別編輯對話框 -->
     <el-dialog
       v-model="showDialog"
       :title="dialogTitle"
@@ -52,8 +52,8 @@
         ref="formRef"
         label-width="150px"
       >
-        <el-form-item label="类别名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入类别名称" />
+        <el-form-item label="類別名稱" prop="name">
+          <el-input v-model="form.name" placeholder="請輸入類別名稱" />
         </el-form-item>
 
         <el-form-item label="描述" prop="description">
@@ -61,33 +61,33 @@
             v-model="form.description"
             type="textarea"
             :rows="3"
-            placeholder="请输入描述"
+            placeholder="請輸入描述"
           />
         </el-form-item>
 
-        <el-form-item label="总限额" prop="total_limit">
+        <el-form-item label="總限額" prop="total_limit">
           <el-input-number
             v-model="form.total_limit"
             :min="0"
             :max="999999"
-            placeholder="0表示无限制"
+            placeholder="0表示無限制"
             style="width: 100%"
           />
-          <div class="form-tip">0表示无限制</div>
+          <div class="form-tip">0表示無限制</div>
         </el-form-item>
 
-        <el-form-item label="每日限额" prop="daily_limit">
+        <el-form-item label="每日限額" prop="daily_limit">
           <el-input-number
             v-model="form.daily_limit"
             :min="0"
             :max="999999"
-            placeholder="0表示无限制"
+            placeholder="0表示無限制"
             style="width: 100%"
           />
-          <div class="form-tip">0表示无限制</div>
+          <div class="form-tip">0表示無限制</div>
         </el-form-item>
 
-        <el-form-item label="每手机号限额" prop="per_phone_limit">
+        <el-form-item label="每手機號限額" prop="per_phone_limit">
           <el-input-number
             v-model="form.per_phone_limit"
             :min="1"
@@ -99,7 +99,7 @@
 
       <template #footer>
         <el-button @click="showDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确认</el-button>
+        <el-button type="primary" @click="submitForm">確認</el-button>
       </template>
     </el-dialog>
   </div>
@@ -112,7 +112,7 @@ import { adminApi } from '../api';
 
 const categories = ref([]);
 const showDialog = ref(false);
-const dialogTitle = ref('新增类别');
+const dialogTitle = ref('新增類別');
 const formRef = ref(null);
 const editingId = ref(null);
 
@@ -125,7 +125,7 @@ const form = reactive({
 });
 
 const rules = {
-  name: [{ required: true, message: '请输入类别名称', trigger: 'blur' }]
+  name: [{ required: true, message: '請輸入類別名稱', trigger: 'blur' }]
 };
 
 onMounted(async () => {
@@ -137,19 +137,19 @@ const loadCategories = async () => {
     const result = await adminApi.getCategories();
     categories.value = result.categories;
   } catch (error) {
-    ElMessage.error('加载类别列表失败');
+    ElMessage.error('載入類別列表失敗');
   }
 };
 
 const handleCreate = () => {
-  dialogTitle.value = '新增类别';
+  dialogTitle.value = '新增類別';
   editingId.value = null;
   resetForm();
   showDialog.value = true;
 };
 
 const handleEdit = (row) => {
-  dialogTitle.value = '编辑类别';
+  dialogTitle.value = '編輯類別';
   editingId.value = row.id;
   Object.assign(form, {
     name: row.name,
@@ -163,13 +163,13 @@ const handleEdit = (row) => {
 
 const handleDelete = async (row) => {
   try {
-    await ElMessageBox.confirm('确认删除该类别吗？', '提示', {
-      confirmButtonText: '确认',
+    await ElMessageBox.confirm('確認刪除該類別吗？', '提示', {
+      confirmButtonText: '確認',
       cancelButtonText: '取消',
       type: 'warning'
     });
-    // 这里应该调用删除API
-    ElMessage.success('删除成功');
+    // 這裡應該呼叫刪除API
+    ElMessage.success('刪除成功');
     await loadCategories();
   } catch (error) {
     // 取消操作
@@ -188,13 +188,13 @@ const submitForm = async () => {
         ElMessage.success('更新成功');
       } else {
         await adminApi.createCategory(form);
-        ElMessage.success('创建成功');
+        ElMessage.success('建立成功');
       }
 
       showDialog.value = false;
       await loadCategories();
     } catch (error) {
-      ElMessage.error(error.message || '操作失败');
+      ElMessage.error(error.message || '操作失敗');
     }
   });
 };

@@ -21,9 +21,9 @@ export async function seedDatabase() {
     
     if (!eventCheck) {
       const now = new Date();
-      const eventDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7天后
-      const collectionStart = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1小时后开始
-      const collectionEnd = new Date(eventDate.getTime() - 1 * 24 * 60 * 60 * 1000); // 活动前1天结束
+      const eventDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7天後
+      const collectionStart = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1小時後開始
+      const collectionEnd = new Date(eventDate.getTime() - 1 * 24 * 60 * 60 * 1000); // 活動前1天結束
       
       const eventResult = await dbRun(
         `INSERT INTO events 
@@ -31,14 +31,14 @@ export async function seedDatabase() {
           ticket_collection_end, checkin_start, checkin_end, allow_web_collection)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          '示例活动',
+          '範例活動',
           '這是一個範例活動，用於測試系統功能',
           eventDate.toISOString(),
           collectionStart.toISOString(),
           collectionEnd.toISOString(),
-          new Date(eventDate.getTime() - 1 * 60 * 60 * 1000).toISOString(), // 活动前1小时开始报到
+          new Date(eventDate.getTime() - 1 * 60 * 60 * 1000).toISOString(), // 活動前1小時開始報到
           eventDate.toISOString(),
-          1 // 允许Web取票
+          1 // 允許Web取票
         ]
       );
       
@@ -56,7 +56,7 @@ export async function seedDatabase() {
       
       await dbRun(
         'INSERT INTO ticket_categories (name, description, total_limit, per_phone_limit) VALUES (?, ?, ?, ?)',
-        ['VIP票', 'VIP票券类别', 50, 1]
+        ['VIP票', 'VIP票券類別', 50, 1]
       );
       
       console.log('✅ 範例票券類別已建立');

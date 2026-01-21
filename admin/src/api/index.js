@@ -8,7 +8,7 @@ const api = axios.create({
   }
 });
 
-// 请求拦截器
+// 請求攔截器
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('adminToken');
@@ -22,13 +22,13 @@ api.interceptors.request.use(
   }
 );
 
-// 响应拦截器
+// 響應攔截器
 api.interceptors.response.use(
   (response) => {
     return response.data;
   },
   (error) => {
-    const message = error.response?.data?.error || '请求失败';
+    const message = error.response?.data?.error || '請求失敗';
     if (error.response?.status === 401) {
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminInfo');
@@ -42,24 +42,24 @@ export default api;
 
 // API方法
 export const adminApi = {
-  // 登录
+  // 登入
   login: (username, password) => api.post('/auth/admin/login', { username, password }),
   
-  // 活动管理
+  // 活動管理
   getEvents: () => api.get('/admin/events'),
   createEvent: (data) => api.post('/admin/events', data),
   updateEvent: (id, data) => api.put(`/admin/events/${id}`, data),
   
-  // 票券类别
+  // 票券類別
   getCategories: () => api.get('/admin/categories'),
   createCategory: (data) => api.post('/admin/categories', data),
   updateCategory: (id, data) => api.put(`/admin/categories/${id}`, data),
   
-  // 待审核名单
+  // 待審核名單
   getPendingList: () => api.get('/admin/pending-list'),
   approvePending: (id, data) => api.post(`/admin/pending-list/${id}/approve`, data),
   rejectPending: (id, data) => api.post(`/admin/pending-list/${id}/reject`, data),
   
-  // 统计
+  // 統計
   getStatistics: (eventId) => api.get('/admin/statistics', { params: { event_id: eventId } })
 };

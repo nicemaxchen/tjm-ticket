@@ -1,30 +1,30 @@
 <template>
   <div class="home">
     <el-card class="welcome-card">
-      <h2>欢迎使用 TJM 票券系统</h2>
-      <p>您可以查询已报名的票券或进行新的报名登记</p>
+      <h2>歡迎使用 TJM 票券系統</h2>
+      <p>您可以查詢已報名的票券或進行新的報名登記</p>
     </el-card>
 
     <el-row :gutter="20" class="feature-cards">
       <el-col :span="12">
         <el-card class="feature-card" @click="$router.push('/query')">
           <el-icon :size="48" color="#409eff"><Search /></el-icon>
-          <h3>查询报名资料</h3>
-          <p>通过手机号查询已报名的票券，查看条码并报到</p>
+          <h3>查詢報名資料</h3>
+          <p>透過手機號查詢已報名的票券，查看條碼並報到</p>
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card class="feature-card" @click="$router.push('/register')">
           <el-icon :size="48" color="#67c23a"><Edit /></el-icon>
-          <h3>登记报名资料</h3>
-          <p>填写报名信息，完成报名并获取票券</p>
+          <h3>登記報名資料</h3>
+          <p>填寫報名資訊，完成報名並取得票券</p>
         </el-card>
       </el-col>
     </el-row>
 
     <el-card class="events-card" v-if="events.length > 0">
       <template #header>
-        <span>近期活动</span>
+        <span>近期活動</span>
       </template>
       <el-timeline>
         <el-timeline-item
@@ -53,9 +53,9 @@ const events = ref([]);
 onMounted(async () => {
   try {
     const result = await ticketApi.getEvents();
-    events.value = result.events.slice(0, 5); // 只显示最近5个活动
+    events.value = result.events.slice(0, 5); // 只顯示最近5個活動
   } catch (error) {
-    console.error('获取活动列表失败:', error);
+    console.error('取得活動列表失敗:', error);
   }
 });
 
