@@ -184,11 +184,13 @@ const handleEventChange = async (eventId) => {
   form.ticket_category_id = null;
   if (eventId) {
     try {
-      const result = await ticketApi.getCategories();
-      categories.value = result.categories;
+      const result = await ticketApi.getCategories(eventId);
+      categories.value = result.categories || [];
     } catch (error) {
       ElMessage.error('取得票券類別失敗');
     }
+  } else {
+    categories.value = [];
   }
 };
 

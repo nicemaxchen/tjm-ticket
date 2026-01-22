@@ -23,9 +23,19 @@ router.get('/events', async (req, res) => {
 // 取得票券類別列表
 router.get('/categories', async (req, res) => {
   try {
-    const categories = await dbAll(
-      'SELECT * FROM ticket_categories ORDER BY id'
-    );
+    const { event_id } = req.query;
+    
+    let sql = 'SELECT * FROM ticket_categories';
+    const params = [];
+    
+    if (event_id) {
+      sql += ' WHERE event_id = ?';
+      params.push(event_id);
+    }
+    
+    sql += ' ORDER BY id';
+    
+    const categories = await dbAll(sql, params);
 
     res.json({
       success: true,
@@ -50,7 +60,8 @@ router.get('/events/:id', async (req, res) => {
 
     // 取得該活動的票券類別
     const categories = await dbAll(
-      'SELECT * FROM ticket_categories ORDER BY id'
+      'SELECT * FROM ticket_categories WHERE event_id = ? ORDER BY id',
+      [id]
     );
 
     res.json({

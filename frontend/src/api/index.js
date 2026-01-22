@@ -40,7 +40,7 @@ export const ticketApi = {
   getEvent: (id) => api.get(`/tickets/events/${id}`),
   
   // 取得票券類別
-  getCategories: () => api.get('/tickets/categories')
+  getCategories: (eventId) => api.get('/tickets/categories', { params: eventId ? { event_id: eventId } : {} })
 };
 
 export const registrationApi = {

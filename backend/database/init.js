@@ -61,12 +61,14 @@ export function initDatabase() {
     // 票券類別表
     `CREATE TABLE IF NOT EXISTS ticket_categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       description TEXT,
       total_limit INTEGER NOT NULL DEFAULT 0,
       daily_limit INTEGER DEFAULT 0,
       per_phone_limit INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
     )`,
     
     // 報名場次表
@@ -194,6 +196,31 @@ export function initDatabase() {
   db.run(`ALTER TABLE events ADD COLUMN location TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
       console.error('❌ Add location column error:', err);
+    }
+  });
+
+  // 為 ticket_categories 表添加 event_id 欄位（遷移）
+  db.run(`ALTER TABLE ticket_categories ADD COLUMN event_id INTEGER`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add event_id column error:', err);
+    } else {
+      // 如果欄位已存在，檢查是否有舊資料需要遷移
+      db.get('SELECT COUNT(*) as count FROM ticket_categories WHERE event_id IS NULL', (err, row) => {
+        if (!err && row && row.count > 0) {
+          // 如果有舊資料且沒有 event_id，嘗試關聯到第一個活動
+          db.get('SELECT id FROM events ORDER BY id LIMIT 1', (err, eventRow) => {
+            if (!err && eventRow) {
+              db.run('UPDATE ticket_categories SET event_id = ? WHERE event_id IS NULL', [eventRow.id], (err) => {
+                if (err) {
+                  console.error('❌ Migrate categories to event error:', err);
+                } else {
+                  console.log('✅ Migrated existing categories to first event');
+                }
+              });
+            }
+          });
+        }
+      });
     }
   });
 

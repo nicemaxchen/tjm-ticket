@@ -17,6 +17,7 @@ export async function seedDatabase() {
     }
 
     // 建立範例活動
+    let eventId = null;
     const eventCheck = await dbGet('SELECT * FROM events LIMIT 1');
     
     if (!eventCheck) {
@@ -45,24 +46,29 @@ export async function seedDatabase() {
         ]
       );
       
+      eventId = eventResult.lastID;
       console.log('✅ 範例活動已建立');
+    } else {
+      eventId = eventCheck.id;
     }
 
-    // 建立範例票券類別
-    const categoryCheck = await dbGet('SELECT * FROM ticket_categories LIMIT 1');
-    
-    if (!categoryCheck) {
-      await dbRun(
-        'INSERT INTO ticket_categories (name, description, total_limit, per_phone_limit) VALUES (?, ?, ?, ?)',
-        ['普通票', '普通票券類別', 100, 2]
-      );
+    // 建立範例票券類別（關聯到活動）
+    if (eventId) {
+      const categoryCheck = await dbGet('SELECT * FROM ticket_categories WHERE event_id = ? LIMIT 1', [eventId]);
       
-      await dbRun(
-        'INSERT INTO ticket_categories (name, description, total_limit, per_phone_limit) VALUES (?, ?, ?, ?)',
-        ['VIP票', 'VIP票券類別', 50, 1]
-      );
-      
-      console.log('✅ 範例票券類別已建立');
+      if (!categoryCheck) {
+        await dbRun(
+          'INSERT INTO ticket_categories (event_id, name, description, total_limit, per_phone_limit) VALUES (?, ?, ?, ?, ?)',
+          [eventId, '普通票', '普通票券類別', 100, 2]
+        );
+        
+        await dbRun(
+          'INSERT INTO ticket_categories (event_id, name, description, total_limit, per_phone_limit) VALUES (?, ?, ?, ?, ?)',
+          [eventId, 'VIP票', 'VIP票券類別', 50, 1]
+        );
+        
+        console.log('✅ 範例票券類別已建立');
+      }
     }
 
     console.log('✅ 資料庫初始化完成');

@@ -51,9 +51,10 @@ export const adminApi = {
   updateEvent: (id, data) => api.put(`/admin/events/${id}`, data),
   
   // 票券類別
-  getCategories: () => api.get('/admin/categories'),
+  getCategories: (eventId) => api.get('/admin/categories', { params: eventId ? { event_id: eventId } : {} }),
   createCategory: (data) => api.post('/admin/categories', data),
   updateCategory: (id, data) => api.put(`/admin/categories/${id}`, data),
+  deleteCategory: (id) => api.delete(`/admin/categories/${id}`),
   
   // 待審核名單
   getPendingList: () => api.get('/admin/pending-list'),

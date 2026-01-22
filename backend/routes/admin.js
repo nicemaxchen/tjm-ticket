@@ -124,9 +124,19 @@ router.put('/events/:id', async (req, res) => {
 // 取得票券類別列表（後台）
 router.get('/categories', async (req, res) => {
   try {
-    const categories = await dbAll(
-      'SELECT * FROM ticket_categories ORDER BY id'
-    );
+    const { event_id } = req.query;
+    
+    let sql = 'SELECT tc.*, e.name as event_name, e.max_attendees FROM ticket_categories tc LEFT JOIN events e ON tc.event_id = e.id';
+    const params = [];
+    
+    if (event_id) {
+      sql += ' WHERE tc.event_id = ?';
+      params.push(event_id);
+    }
+    
+    sql += ' ORDER BY tc.id';
+    
+    const categories = await dbAll(sql, params);
 
     res.json({
       success: true,
@@ -142,6 +152,7 @@ router.get('/categories', async (req, res) => {
 router.post('/categories', async (req, res) => {
   try {
     const {
+      event_id,
       name,
       description,
       total_limit,
@@ -153,14 +164,44 @@ router.post('/categories', async (req, res) => {
       return res.status(400).json({ error: '類別名稱不能為空' });
     }
 
+    if (!event_id) {
+      return res.status(400).json({ error: '活動ID不能為空' });
+    }
+
+    // 驗證活動是否存在
+    const event = await dbGet('SELECT * FROM events WHERE id = ?', [event_id]);
+    if (!event) {
+      return res.status(400).json({ error: '活動不存在' });
+    }
+
+    // 驗證總限額不超過活動上限
+    if (event.max_attendees > 0 && total_limit > 0) {
+      // 取得該活動所有類別的總限額總和（排除無限制的）
+      const existingCategories = await dbAll(
+        'SELECT total_limit FROM ticket_categories WHERE event_id = ? AND total_limit > 0',
+        [event_id]
+      );
+      const currentSum = existingCategories.reduce((sum, cat) => sum + (cat.total_limit || 0), 0);
+      const newSum = currentSum + total_limit;
+      
+      if (newSum > event.max_attendees) {
+        return res.status(400).json({ 
+          error: `所有類別總限額 (${newSum}) 不能超過活動上限 (${event.max_attendees})` 
+        });
+      }
+    }
+
     const result = await dbRun(
       `INSERT INTO ticket_categories 
-       (name, description, total_limit, daily_limit, per_phone_limit)
-       VALUES (?, ?, ?, ?, ?)`,
-      [name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1]
+       (event_id, name, description, total_limit, daily_limit, per_phone_limit)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [event_id, name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1]
     );
 
-    const category = await dbGet('SELECT * FROM ticket_categories WHERE id = ?', [result.lastID]);
+    const category = await dbGet(
+      'SELECT tc.*, e.name as event_name FROM ticket_categories tc LEFT JOIN events e ON tc.event_id = e.id WHERE tc.id = ?',
+      [result.lastID]
+    );
 
     res.json({
       success: true,
@@ -178,6 +219,7 @@ router.put('/categories/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const {
+      event_id,
       name,
       description,
       total_limit,
@@ -185,15 +227,79 @@ router.put('/categories/:id', async (req, res) => {
       per_phone_limit
     } = req.body;
 
+    // 取得當前類別資訊
+    const currentCategory = await dbGet('SELECT * FROM ticket_categories WHERE id = ?', [id]);
+    if (!currentCategory) {
+      return res.status(404).json({ error: '票券類別不存在' });
+    }
+
+    // 確定要使用的 event_id（如果提供了新的，使用新的；否則使用原有的）
+    const targetEventId = event_id || currentCategory.event_id;
+    
+    // 驗證活動是否存在
+    const event = await dbGet('SELECT * FROM events WHERE id = ?', [targetEventId]);
+    if (!event) {
+      return res.status(400).json({ error: '活動不存在' });
+    }
+
+    // 驗證總限額不超過活動上限
+    if (event.max_attendees > 0 && total_limit !== undefined && total_limit > 0) {
+      // 取得該活動所有類別的總限額總和（排除當前類別和無限制的）
+      const existingCategories = await dbAll(
+        'SELECT total_limit FROM ticket_categories WHERE event_id = ? AND id != ? AND total_limit > 0',
+        [targetEventId, id]
+      );
+      const currentSum = existingCategories.reduce((sum, cat) => sum + (cat.total_limit || 0), 0);
+      const newSum = currentSum + total_limit;
+      
+      if (newSum > event.max_attendees) {
+        return res.status(400).json({ 
+          error: `所有類別總限額 (${newSum}) 不能超過活動上限 (${event.max_attendees})` 
+        });
+      }
+    }
+
+    const updateFields = [];
+    const updateValues = [];
+
+    if (event_id !== undefined) {
+      updateFields.push('event_id = ?');
+      updateValues.push(event_id);
+    }
+    if (name !== undefined) {
+      updateFields.push('name = ?');
+      updateValues.push(name);
+    }
+    if (description !== undefined) {
+      updateFields.push('description = ?');
+      updateValues.push(description);
+    }
+    if (total_limit !== undefined) {
+      updateFields.push('total_limit = ?');
+      updateValues.push(total_limit || 0);
+    }
+    if (daily_limit !== undefined) {
+      updateFields.push('daily_limit = ?');
+      updateValues.push(daily_limit || 0);
+    }
+    if (per_phone_limit !== undefined) {
+      updateFields.push('per_phone_limit = ?');
+      updateValues.push(per_phone_limit || 1);
+    }
+
+    updateValues.push(id);
+
     await dbRun(
       `UPDATE ticket_categories 
-       SET name = ?, description = ?, total_limit = ?, 
-           daily_limit = ?, per_phone_limit = ?
+       SET ${updateFields.join(', ')}
        WHERE id = ?`,
-      [name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1, id]
+      updateValues
     );
 
-    const category = await dbGet('SELECT * FROM ticket_categories WHERE id = ?', [id]);
+    const category = await dbGet(
+      'SELECT tc.*, e.name as event_name FROM ticket_categories tc LEFT JOIN events e ON tc.event_id = e.id WHERE tc.id = ?',
+      [id]
+    );
 
     res.json({
       success: true,
@@ -203,6 +309,45 @@ router.put('/categories/:id', async (req, res) => {
   } catch (error) {
     console.error('更新票券類別錯誤:', error);
     res.status(500).json({ error: '更新失敗' });
+  }
+});
+
+// 刪除票券類別
+router.delete('/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 檢查類別是否存在
+    const category = await dbGet('SELECT * FROM ticket_categories WHERE id = ?', [id]);
+    if (!category) {
+      return res.status(404).json({ error: '票券類別不存在' });
+    }
+
+    // 檢查是否有相關的報名記錄或票券
+    const registrationCheck = await dbGet(
+      'SELECT COUNT(*) as count FROM registrations WHERE ticket_category_id = ?',
+      [id]
+    );
+    const ticketCheck = await dbGet(
+      'SELECT COUNT(*) as count FROM tickets WHERE ticket_category_id = ?',
+      [id]
+    );
+
+    if ((registrationCheck && registrationCheck.count > 0) || (ticketCheck && ticketCheck.count > 0)) {
+      return res.status(400).json({ 
+        error: '該類別已有報名記錄或票券，無法刪除' 
+      });
+    }
+
+    await dbRun('DELETE FROM ticket_categories WHERE id = ?', [id]);
+
+    res.json({
+      success: true,
+      message: '票券類別刪除成功'
+    });
+  } catch (error) {
+    console.error('刪除票券類別錯誤:', error);
+    res.status(500).json({ error: '刪除失敗' });
   }
 });
 
