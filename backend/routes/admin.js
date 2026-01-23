@@ -421,14 +421,26 @@ router.delete('/categories/:id', async (req, res) => {
 // 取得待審核名單
 router.get('/pending-list', async (req, res) => {
   try {
-    const pendingList = await dbAll(
-      `SELECT pl.*, e.name as event_name, tc.name as category_name
-       FROM pending_list pl
-       JOIN events e ON pl.event_id = e.id
-       JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
-       WHERE pl.status = 'pending'
-       ORDER BY pl.created_at DESC`
-    );
+    const { event_id } = req.query;
+    
+    let sql = `SELECT pl.*, e.name as event_name, tc.name as category_name
+               FROM pending_list pl
+               JOIN events e ON pl.event_id = e.id
+               JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
+               WHERE pl.status = 'pending'`;
+    const params = [];
+    
+    if (event_id) {
+      const eventIdNum = Number(event_id);
+      if (!isNaN(eventIdNum)) {
+        sql += ' AND pl.event_id = ?';
+        params.push(eventIdNum);
+      }
+    }
+    
+    sql += ' ORDER BY pl.created_at DESC';
+    
+    const pendingList = await dbAll(sql, params);
 
     res.json({
       success: true,

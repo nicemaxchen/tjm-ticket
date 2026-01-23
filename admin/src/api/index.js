@@ -58,7 +58,7 @@ export const adminApi = {
   deleteCategory: (id) => api.delete(`/admin/categories/${id}`),
   
   // 待審核名單
-  getPendingList: () => api.get('/admin/pending-list'),
+  getPendingList: (eventId) => api.get('/admin/pending-list', { params: eventId ? { event_id: eventId } : {} }),
   approvePending: (id, data) => api.post(`/admin/pending-list/${id}/approve`, data),
   rejectPending: (id, data) => api.post(`/admin/pending-list/${id}/reject`, data),
   

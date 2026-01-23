@@ -106,6 +106,34 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- 待審查列表 -->
+    <el-card style="margin-top: 20px;" v-if="selectedEventId">
+      <template #header>
+        <span>待審查列表</span>
+      </template>
+      <el-table :data="pendingList" border style="width: 100%">
+        <el-table-column prop="name" label="姓名" width="120" />
+        <el-table-column prop="category_name" label="票券類別" width="150" />
+        <el-table-column prop="phone" label="手機號" width="130" />
+        <el-table-column prop="email" label="Email" width="200" />
+        <el-table-column prop="created_at" label="報名時間" width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button type="success" size="small" @click="handleApprove(row)">
+              審核通過
+            </el-button>
+            <el-button type="danger" size="small" @click="handleReject(row)">
+              拒絕
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
@@ -128,6 +156,7 @@ const statistics = reactive({
   pendingCount: 0
 });
 const tickets = ref([]);
+const pendingList = ref([]);
 
 onMounted(async () => {
   // 先載入活動列表
@@ -200,7 +229,12 @@ const handleEventChange = () => {
       path: '/statistics',
       query: { eventId: selectedEventId.value.toString() }
     });
+    // 先清空列表，避免显示旧数据
+    pendingList.value = [];
     loadStatistics();
+  } else {
+    // 如果没有选择活动，清空列表
+    pendingList.value = [];
   }
 };
 
@@ -213,8 +247,31 @@ const loadStatistics = async () => {
     statistics.max_attendees = result.statistics.max_attendees || 0;
     statistics.pendingCount = result.statistics.pendingCount || 0;
     tickets.value = result.tickets || [];
+    
+    // 載入待審查列表
+    if (selectedEventId.value) {
+      await loadPendingList();
+    } else {
+      pendingList.value = [];
+    }
   } catch (error) {
     console.error('載入統計資訊失敗:', error);
+  }
+};
+
+const loadPendingList = async () => {
+  if (!selectedEventId.value) {
+    pendingList.value = [];
+    return;
+  }
+  
+  try {
+    const result = await adminApi.getPendingList(selectedEventId.value);
+    pendingList.value = result.pendingList || [];
+    console.log('載入待審查列表，活動ID:', selectedEventId.value, '記錄數:', pendingList.value.length);
+  } catch (error) {
+    console.error('載入待審查列表失敗:', error);
+    pendingList.value = [];
   }
 };
 
@@ -237,6 +294,44 @@ const handleDelete = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('刪除失敗');
+    }
+  }
+};
+
+const handleApprove = async (row) => {
+  try {
+    await ElMessageBox.confirm('確認審核通過該報名嗎？', '提示', {
+      confirmButtonText: '確認',
+      cancelButtonText: '取消',
+      type: 'warning'
+    });
+    
+    await adminApi.approvePending(row.id, {});
+    ElMessage.success('審核通過成功');
+    await loadPendingList();
+    await loadStatistics();
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '審核失敗');
+    }
+  }
+};
+
+const handleReject = async (row) => {
+  try {
+    await ElMessageBox.confirm('確認拒絕該報名嗎？', '提示', {
+      confirmButtonText: '確認',
+      cancelButtonText: '取消',
+      type: 'warning'
+    });
+    
+    await adminApi.rejectPending(row.id, {});
+    ElMessage.success('已拒絕該報名');
+    await loadPendingList();
+    await loadStatistics();
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '操作失敗');
     }
   }
 };
