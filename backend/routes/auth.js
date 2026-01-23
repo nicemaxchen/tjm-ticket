@@ -29,11 +29,15 @@ router.post('/sms/send', async (req, res) => {
     // 實際專案中這裡應該呼叫簡訊服務API
     console.log(`📱 簡訊驗證碼 [${phone}]: ${code} (過期時間: ${expiresAt})`);
 
+    // 開發/測試環境：總是返回驗證碼方便測試
+    // 如果 NODE_ENV 未設置，默認為開發環境
+    const isDev = !process.env.NODE_ENV || process.env.NODE_ENV !== 'production';
+    
     res.json({
       success: true,
       message: '驗證碼已發送',
       // 開發環境回傳驗證碼，生產環境應移除
-      code: process.env.NODE_ENV === 'development' ? code : undefined
+      code: isDev ? code : undefined
     });
   } catch (error) {
     console.error('發送驗證碼錯誤:', error);

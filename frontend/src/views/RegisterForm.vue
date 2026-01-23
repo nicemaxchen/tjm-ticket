@@ -96,6 +96,7 @@
       title="報名成功"
       width="500px"
       :close-on-click-modal="false"
+      @close="handleDialogClose"
     >
       <div v-if="resultTicket">
         <el-alert
@@ -114,12 +115,20 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div style="margin-top: 20px; text-align: center;" v-if="resultTicket.ticket">
+        <div style="margin-top: 20px; text-align: center;">
           <el-button
+            v-if="resultTicket.ticket"
             type="primary"
             @click="viewTicketDetail(resultTicket.ticket.token_id)"
+            style="margin-right: 10px;"
           >
             查看票券詳情
+          </el-button>
+          <el-button
+            type="default"
+            @click="goToHome"
+          >
+            返回首頁
           </el-button>
         </div>
       </div>
@@ -163,7 +172,7 @@ const rules = {
   ],
   phone: [
     { required: true, message: '請輸入手機號', trigger: 'blur' },
-    { pattern: /^1[3-9]\d{9}$/, message: '請輸入正確的手機號', trigger: 'blur' }
+    { pattern: /^09\d{8}$/, message: '請輸入正確的手機號（格式：09XXXXXXXX）', trigger: 'blur' }
   ],
   code: [
     { required: true, message: '請輸入驗證碼', trigger: 'blur' },
@@ -200,17 +209,29 @@ const sendSMS = async () => {
     return;
   }
 
-  if (!/^1[3-9]\d{9}$/.test(form.phone)) {
-    ElMessage.warning('請輸入正確的手機號');
+  if (!/^09\d{8}$/.test(form.phone)) {
+    ElMessage.warning('請輸入正確的手機號（格式：09XXXXXXXX）');
     return;
   }
 
   try {
-    await authApi.sendSMS(form.phone);
+    const result = await authApi.sendSMS(form.phone);
+    console.log('📱 API 響應:', result);
     ElMessage.success('驗證碼已發送');
+    
+    // 開發環境：在控制台顯示驗證碼
+    if (result.code) {
+      console.log(`📱 驗證碼 [${form.phone}]: ${result.code}`);
+      ElMessage.info(`開發環境驗證碼：${result.code}`);
+    } else {
+      console.warn('⚠️ API 響應中沒有 code 字段，完整響應:', result);
+      ElMessage.warning('驗證碼已發送，但未返回驗證碼（請查看後端控制台）');
+    }
+    
     startCountdown();
   } catch (error) {
     ElMessage.error(error.message || '發送驗證碼失敗');
+    console.error('發送驗證碼錯誤:', error);
   }
 };
 
@@ -234,12 +255,11 @@ const submitForm = async () => {
       
       showSuccessDialog.value = true;
 
-      // 如果不需要審核，3秒後跳轉到票券詳情頁
-      if (!result.requires_review && result.ticket) {
-        setTimeout(() => {
-          viewTicketDetail(result.ticket.token_id);
-        }, 3000);
-      }
+      // 3秒後自動關閉對話框並返回首頁
+      setTimeout(() => {
+        showSuccessDialog.value = false;
+        goToHome();
+      }, 3000);
     } catch (error) {
       ElMessage.error(error.message || '報名失敗');
     }
@@ -252,7 +272,18 @@ const resetForm = () => {
 };
 
 const viewTicketDetail = (tokenId) => {
+  showSuccessDialog.value = false;
   router.push(`/ticket/${tokenId}`);
+};
+
+const goToHome = () => {
+  showSuccessDialog.value = false;
+  router.push('/');
+};
+
+const handleDialogClose = () => {
+  // 對話框關閉時返回首頁
+  goToHome();
 };
 
 const startCountdown = () => {

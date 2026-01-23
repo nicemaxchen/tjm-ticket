@@ -27,9 +27,24 @@ router.post('/query', async (req, res) => {
       [phone]
     );
 
+    // 查詢該手機號下的待審查記錄
+    const pendingRegistrations = await dbAll(
+      `SELECT pl.*, e.name as event_name, e.location as event_location,
+              tc.name as category_name,
+              r.status as registration_status
+       FROM pending_list pl
+       JOIN events e ON pl.event_id = e.id
+       JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
+       JOIN registrations r ON pl.registration_id = r.id
+       WHERE pl.phone = ? AND pl.status = 'pending'
+       ORDER BY pl.created_at DESC`,
+      [phone]
+    );
+
     res.json({
       success: true,
-      tickets: tickets || []
+      tickets: tickets || [],
+      pendingRegistrations: pendingRegistrations || []
     });
   } catch (error) {
     console.error('查詢報名資料錯誤:', error);
@@ -100,6 +115,23 @@ router.post('/register', async (req, res) => {
     );
 
     const registrationId = regResult.lastID;
+
+    // 如果類別設置為需要審查，直接進入待審查名單
+    if (category.requires_review) {
+      // 加入待審核名單
+      await dbRun(
+        `INSERT INTO pending_list 
+         (registration_id, name, email, phone, event_id, ticket_category_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+        [registrationId, name, email, phone, event_id, ticket_category_id]
+      );
+
+      return res.json({
+        success: false,
+        message: '報名已提交，需要審核',
+        requires_review: true
+      });
+    }
 
     // 檢查是否可以直接取票
     const canCollect = await checkTicketCollection(

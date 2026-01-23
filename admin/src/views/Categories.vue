@@ -84,6 +84,13 @@
             {{ row.per_phone_limit || 1 }}
           </template>
         </el-table-column>
+        <el-table-column prop="requires_review" label="需審查" width="100" sortable>
+          <template #default="{ row }">
+            <el-tag :type="row.requires_review ? 'warning' : 'success'">
+              {{ row.requires_review ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">
@@ -187,6 +194,17 @@
             style="width: 100%"
           />
         </el-form-item>
+
+        <el-form-item label="是否需要審查" prop="requires_review">
+          <el-switch
+            v-model="form.requires_review"
+            active-text="是"
+            inactive-text="否"
+          />
+          <div class="form-tip">
+            開啟後，報名此類別的資料將進入待審查名單
+          </div>
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -217,7 +235,8 @@ const form = reactive({
   description: '',
   total_limit: 0,
   daily_limit: 0,
-  per_phone_limit: 1
+  per_phone_limit: 1,
+  requires_review: false
 });
 
 const rules = {
@@ -356,7 +375,8 @@ const handleEdit = (row) => {
     description: row.description || '',
     total_limit: row.total_limit || 0,
     daily_limit: row.daily_limit || 0,
-    per_phone_limit: row.per_phone_limit || 1
+    per_phone_limit: row.per_phone_limit || 1,
+    requires_review: row.requires_review ? true : false
   });
   // 確保活動資訊已載入
   if (row.event_id && !selectedEvent.value) {
@@ -412,7 +432,8 @@ const resetForm = () => {
     description: '',
     total_limit: 0,
     daily_limit: 0,
-    per_phone_limit: 1
+    per_phone_limit: 1,
+    requires_review: false
   });
   formRef.value?.resetFields();
 };

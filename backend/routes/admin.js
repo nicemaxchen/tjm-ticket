@@ -157,7 +157,8 @@ router.post('/categories', async (req, res) => {
       description,
       total_limit,
       daily_limit,
-      per_phone_limit
+      per_phone_limit,
+      requires_review
     } = req.body;
 
     if (!name) {
@@ -193,9 +194,9 @@ router.post('/categories', async (req, res) => {
 
     const result = await dbRun(
       `INSERT INTO ticket_categories 
-       (event_id, name, description, total_limit, daily_limit, per_phone_limit)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [event_id, name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1]
+       (event_id, name, description, total_limit, daily_limit, per_phone_limit, requires_review)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [event_id, name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1, requires_review ? 1 : 0]
     );
 
     const category = await dbGet(
@@ -210,7 +211,10 @@ router.post('/categories', async (req, res) => {
     });
   } catch (error) {
     console.error('建立票券類別錯誤:', error);
-    res.status(500).json({ error: '建立失敗' });
+    res.status(500).json({ 
+      error: '建立失敗',
+      message: error.message || '未知錯誤'
+    });
   }
 });
 
@@ -224,7 +228,8 @@ router.put('/categories/:id', async (req, res) => {
       description,
       total_limit,
       daily_limit,
-      per_phone_limit
+      per_phone_limit,
+      requires_review
     } = req.body;
 
     // 取得當前類別資訊
@@ -286,6 +291,10 @@ router.put('/categories/:id', async (req, res) => {
       updateFields.push('per_phone_limit = ?');
       updateValues.push(per_phone_limit || 1);
     }
+    if (requires_review !== undefined) {
+      updateFields.push('requires_review = ?');
+      updateValues.push(requires_review ? 1 : 0);
+    }
 
     updateValues.push(id);
 
@@ -308,7 +317,10 @@ router.put('/categories/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('更新票券類別錯誤:', error);
-    res.status(500).json({ error: '更新失敗' });
+    res.status(500).json({ 
+      error: '更新失敗',
+      message: error.message || '未知錯誤'
+    });
   }
 });
 

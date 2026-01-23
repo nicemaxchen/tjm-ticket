@@ -31,54 +31,125 @@
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="handleVerify">驗證</el-button>
+          <el-button type="primary" @click="handleVerify">查詢</el-button>
           <el-button @click="reset">重置</el-button>
         </el-form-item>
       </el-form>
 
-      <div v-if="verified && tickets.length > 0">
-        <el-alert
-          title="查詢成功"
-          type="success"
-          :closable="false"
-          style="margin-bottom: 20px"
-        />
+      <div v-if="verified">
+        <!-- 待審查記錄 -->
+        <div v-if="pendingRegistrations.length > 0" style="margin-bottom: 30px;">
+          <el-alert
+            title="審查中"
+            type="warning"
+            :closable="false"
+            style="margin-bottom: 20px"
+          />
+          <div class="ticket-list">
+            <el-card 
+              v-for="(item, index) in pendingRegistrations" 
+              :key="index"
+              class="ticket-card"
+              shadow="hover"
+            >
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="活動名稱">
+                  {{ item.event_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="活動地點" v-if="item.event_location">
+                  {{ item.event_location }}
+                </el-descriptions-item>
+                <el-descriptions-item label="票券類別">
+                  {{ item.category_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="狀態">
+                  <el-tag type="warning">審查中</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="報名時間">
+                  {{ formatDate(item.created_at) }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+          </div>
+        </div>
 
-        <el-table :data="tickets" border>
-          <el-table-column prop="event_name" label="活動名稱" width="200" />
-          <el-table-column prop="event_location" label="活動地點" width="150" />
-          <el-table-column prop="category_name" label="票券類別" width="150" />
-          <el-table-column prop="barcode" label="條碼" width="180" />
-          <el-table-column prop="checkin_status" label="報到狀態" width="120">
-            <template #default="{ row }">
-              <el-tag :type="row.checkin_status === 'checked' ? 'success' : 'info'">
-                {{ row.checkin_status === 'checked' ? '已報到' : '未報到' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="200">
-            <template #default="{ row }">
-              <el-button
-                type="primary"
-                size="small"
-                @click="viewTicket(row)"
-              >
-                查看票券
-              </el-button>
-              <el-button
-                v-if="row.checkin_status === 'unchecked'"
-                type="success"
-                size="small"
-                @click="handleCheckin(row)"
-              >
-                掃碼報到
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <!-- 已通過審查的票券 -->
+        <div v-if="tickets.length > 0">
+          <el-alert
+            title="查詢成功"
+            type="success"
+            :closable="false"
+            style="margin-bottom: 20px"
+          />
+
+          <div class="ticket-list">
+            <el-card 
+              v-for="(ticket, index) in tickets" 
+              :key="index"
+              class="ticket-card"
+              shadow="hover"
+            >
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="活動名稱">
+                  {{ ticket.event_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="活動地點" v-if="ticket.event_location">
+                  {{ ticket.event_location }}
+                </el-descriptions-item>
+                <el-descriptions-item label="票券類別">
+                  {{ ticket.category_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="條碼">
+                  <el-text copyable style="font-size: 16px; font-weight: bold;">
+                    {{ ticket.barcode }}
+                  </el-text>
+                </el-descriptions-item>
+                <el-descriptions-item label="報到狀態">
+                  <el-tag :type="ticket.checkin_status === 'checked' ? 'success' : 'info'">
+                    {{ ticket.checkin_status === 'checked' ? '已報到' : '未報到' }}
+                  </el-tag>
+                </el-descriptions-item>
+              </el-descriptions>
+              <div class="ticket-actions">
+                <el-button
+                  type="primary"
+                  @click="viewTicket(ticket)"
+                >
+                  查看票券
+                </el-button>
+                <el-button
+                  v-if="ticket.checkin_status === 'unchecked'"
+                  type="success"
+                  @click="handleCheckin(ticket)"
+                >
+                  掃碼報到
+                </el-button>
+              </div>
+            </el-card>
+          </div>
+        </div>
+
+        <!-- 如果沒有任何記錄 -->
+        <div v-if="tickets.length === 0 && pendingRegistrations.length === 0">
+          <el-alert
+            title="查詢結果"
+            type="info"
+            :closable="false"
+            style="margin-bottom: 20px"
+          />
+          <el-card class="ticket-card" shadow="hover">
+            <div style="text-align: center; padding: 40px 20px;">
+              <div style="font-size: 48px; color: #909399; margin-bottom: 15px;">📋</div>
+              <div style="font-size: 16px; color: #909399;">未找到相關報名記錄</div>
+            </div>
+          </el-card>
+        </div>
+
+        <!-- 返回首頁按鈕 -->
+        <div style="margin-top: 20px; text-align: center;">
+          <el-button type="default" @click="goToHome">返回首頁</el-button>
+        </div>
       </div>
-
-      <el-empty v-if="verified && tickets.length === 0" description="未找到相關報名記錄" />
     </el-card>
 
     <!-- 票券詳情對話框 -->
@@ -113,9 +184,11 @@
 
 <script setup>
 import { ref, reactive } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { registrationApi, authApi } from '../api';
 
+const router = useRouter();
 const form = reactive({
   phone: '',
   code: ''
@@ -125,6 +198,7 @@ const verified = ref(false);
 const showVerificationCode = ref(false);
 const countdown = ref(0);
 const tickets = ref([]);
+const pendingRegistrations = ref([]);
 const showTicketDialog = ref(false);
 const selectedTicket = ref(null);
 
@@ -134,18 +208,30 @@ const sendSMS = async () => {
     return;
   }
 
-  if (!/^1[3-9]\d{9}$/.test(form.phone)) {
-    ElMessage.warning('請輸入正確的手機號');
+  if (!/^09\d{8}$/.test(form.phone)) {
+    ElMessage.warning('請輸入正確的手機號（格式：09XXXXXXXX）');
     return;
   }
 
   try {
-    await authApi.sendSMS(form.phone);
+    const result = await authApi.sendSMS(form.phone);
+    console.log('📱 API 響應:', result);
     ElMessage.success('驗證碼已發送');
+    
+    // 開發環境：在控制台顯示驗證碼
+    if (result.code) {
+      console.log(`📱 驗證碼 [${form.phone}]: ${result.code}`);
+      ElMessage.info(`開發環境驗證碼：${result.code}`);
+    } else {
+      console.warn('⚠️ API 響應中沒有 code 字段，完整響應:', result);
+      ElMessage.warning('驗證碼已發送，但未返回驗證碼（請查看後端控制台）');
+    }
+    
     showVerificationCode.value = true;
     startCountdown();
   } catch (error) {
     ElMessage.error(error.message || '發送驗證碼失敗');
+    console.error('發送驗證碼錯誤:', error);
   }
 };
 
@@ -168,11 +254,14 @@ const handleVerify = async () => {
 
     // 驗證成功后查詢報名資料
     const result = await registrationApi.queryRegistration(form.phone);
-    tickets.value = result.tickets;
+    tickets.value = result.tickets || [];
+    pendingRegistrations.value = result.pendingRegistrations || [];
     verified.value = true;
     
-    if (result.tickets.length === 0) {
+    if (result.tickets.length === 0 && result.pendingRegistrations.length === 0) {
       ElMessage.info('未找到相關報名記錄');
+    } else if (result.pendingRegistrations.length > 0) {
+      ElMessage.info(`找到 ${result.pendingRegistrations.length} 筆審查中的記錄`);
     }
   } catch (error) {
     ElMessage.error(error.message || '驗證失敗');
@@ -215,7 +304,24 @@ const reset = () => {
   verified.value = false;
   showVerificationCode.value = false;
   tickets.value = [];
+  pendingRegistrations.value = [];
   countdown.value = 0;
+};
+
+const goToHome = () => {
+  router.push('/');
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleString('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
 const startCountdown = () => {
@@ -233,6 +339,31 @@ const startCountdown = () => {
 .query-registration {
   max-width: 900px;
   margin: 0 auto;
+}
+
+.ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ticket-card {
+  margin-bottom: 0;
+}
+
+.ticket-card :deep(.el-card__body) {
+  padding: 20px;
+}
+
+.ticket-actions {
+  margin-top: 20px;
+  text-align: center;
+  padding-top: 15px;
+  border-top: 1px solid #ebeef5;
+}
+
+.ticket-actions .el-button {
+  margin: 0 5px;
 }
 
 .ticket-detail {

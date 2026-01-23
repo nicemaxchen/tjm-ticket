@@ -224,5 +224,12 @@ export function initDatabase() {
     }
   });
 
+  // 為 ticket_categories 表添加 requires_review 欄位
+  db.run(`ALTER TABLE ticket_categories ADD COLUMN requires_review BOOLEAN DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add requires_review column error:', err);
+    }
+  });
+
   console.log('✅ Database tables initialized');
 }
