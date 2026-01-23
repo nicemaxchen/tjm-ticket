@@ -92,6 +92,28 @@
           <div class="form-tip">0表示無限制</div>
         </el-form-item>
 
+        <el-form-item label="貴賓身份每手機號限額" prop="vip_per_phone_limit">
+          <el-input-number
+            v-model="form.vip_per_phone_limit"
+            :min="0"
+            :step="1"
+            placeholder="0表示無限制"
+            style="width: 100%"
+          />
+          <div class="form-tip">0表示無限制，此限額適用於所有標記為「貴賓」身份的票券類別</div>
+        </el-form-item>
+
+        <el-form-item label="一般身份每手機號限額" prop="general_per_phone_limit">
+          <el-input-number
+            v-model="form.general_per_phone_limit"
+            :min="0"
+            :step="1"
+            placeholder="0表示無限制"
+            style="width: 100%"
+          />
+          <div class="form-tip">0表示無限制，此限額適用於所有標記為「一般」身份的票券類別</div>
+        </el-form-item>
+
         <el-form-item label="開放取票時間起" prop="ticket_collection_start">
           <el-date-picker
             v-model="form.ticket_collection_start"
@@ -158,6 +180,8 @@ const form = reactive({
   event_date: null,
   location: '',
   max_attendees: 0,
+  vip_per_phone_limit: 0,
+  general_per_phone_limit: 0,
   ticket_collection_start: null,
   ticket_collection_end: null,
   checkin_start: null,
@@ -198,6 +222,8 @@ const handleEdit = (row) => {
     event_date: row.event_date ? new Date(row.event_date) : null,
     location: row.location || '',
     max_attendees: row.max_attendees || 0,
+    vip_per_phone_limit: row.vip_per_phone_limit || 0,
+    general_per_phone_limit: row.general_per_phone_limit || 0,
     ticket_collection_start: row.ticket_collection_start ? new Date(row.ticket_collection_start) : null,
     ticket_collection_end: row.ticket_collection_end ? new Date(row.ticket_collection_end) : null,
     checkin_start: row.checkin_start ? new Date(row.checkin_start) : null,
@@ -240,6 +266,8 @@ const submitForm = async () => {
         event_date: form.event_date ? form.event_date.toISOString() : null,
         location: String(form.location || ''),
         max_attendees: maxAttendees,
+        vip_per_phone_limit: form.vip_per_phone_limit || 0,
+        general_per_phone_limit: form.general_per_phone_limit || 0,
         ticket_collection_start: form.ticket_collection_start ? form.ticket_collection_start.toISOString() : null,
         ticket_collection_end: form.ticket_collection_end ? form.ticket_collection_end.toISOString() : null,
         checkin_start: form.checkin_start ? form.checkin_start.toISOString() : null,
@@ -273,6 +301,8 @@ const resetForm = () => {
     event_date: null,
     location: '',
     max_attendees: 0,
+    vip_per_phone_limit: 0,
+    general_per_phone_limit: 0,
     ticket_collection_start: null,
     ticket_collection_end: null,
     checkin_start: null,

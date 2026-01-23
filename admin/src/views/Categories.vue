@@ -88,9 +88,11 @@
             {{ row.daily_limit || '無限制' }}
           </template>
         </el-table-column>
-        <el-table-column prop="per_phone_limit" label="每手機號限額" width="120">
+        <el-table-column prop="identity_type" label="身份類別" width="120">
           <template #default="{ row }">
-            {{ row.per_phone_limit || 1 }}
+            <el-tag :type="row.identity_type === 'vip' ? 'warning' : 'info'">
+              {{ row.identity_type === 'vip' ? '貴賓' : '一般' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="requires_review" label="需審查" width="100">
@@ -162,6 +164,20 @@
           />
         </el-form-item>
 
+        <el-form-item label="身份類別" prop="identity_type">
+          <el-select
+            v-model="form.identity_type"
+            placeholder="請選擇身份類別"
+            style="width: 100%"
+          >
+            <el-option label="一般" value="general" />
+            <el-option label="貴賓" value="vip" />
+          </el-select>
+          <div class="form-tip form-tip-right">
+            選擇此類別的身份類別，限額由活動設定中的對應身份限額決定
+          </div>
+        </el-form-item>
+
         <el-form-item label="總限額" prop="total_limit">
           <el-input-number
             v-model="form.total_limit"
@@ -200,15 +216,6 @@
             style="width: 100%"
           />
           <div class="form-tip">0表示無限制</div>
-        </el-form-item>
-
-        <el-form-item label="每手機號限額" prop="per_phone_limit">
-          <el-input-number
-            v-model="form.per_phone_limit"
-            :min="1"
-            :max="10"
-            style="width: 100%"
-          />
         </el-form-item>
 
         <el-form-item label="是否需要審查" prop="requires_review">
@@ -266,7 +273,7 @@ const form = reactive({
   description: '',
   total_limit: 0,
   daily_limit: 0,
-  per_phone_limit: 1,
+  identity_type: 'general',
   requires_review: false,
   allow_collection: true
 });
@@ -459,7 +466,7 @@ const handleEdit = (row) => {
     description: row.description || '',
     total_limit: row.total_limit || 0,
     daily_limit: row.daily_limit || 0,
-    per_phone_limit: row.per_phone_limit || 1,
+    identity_type: row.identity_type || 'general',
     requires_review: row.requires_review ? true : false,
     allow_collection: (row.allow_collection === 1 || row.allow_collection === true || row.allow_collection === null || row.allow_collection === undefined) ? true : false
   });
@@ -517,7 +524,7 @@ const resetForm = () => {
     description: '',
     total_limit: 0,
     daily_limit: 0,
-    per_phone_limit: 1,
+    identity_type: 'general',
     requires_review: false,
     allow_collection: true
   });

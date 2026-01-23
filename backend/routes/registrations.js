@@ -88,29 +88,34 @@ router.post('/register', async (req, res) => {
       return res.status(404).json({ error: '票券類別不存在' });
     }
 
-    // 檢查同一手機號是否超過限額（包括已獲取的票券和待審查的記錄）
-    if (category.per_phone_limit > 0) {
-      // 查詢已獲取的票券數量
+    // 檢查同一手機號是否超過限額（根據身份類別檢查該活動的限額）
+    const identityType = category.identity_type || 'general';
+    const limitField = identityType === 'vip' ? 'vip_per_phone_limit' : 'general_per_phone_limit';
+    const eventLimit = event[limitField] || 0;
+
+    if (eventLimit > 0) {
+      // 查詢該手機號在該活動中，所有屬於該身份類別的已獲取票券數量
       const phoneTicketCount = await dbGet(
-        `SELECT COUNT(*) as count FROM tickets 
-         WHERE phone = ? AND ticket_category_id = ? AND event_id = ?`,
-        [phone, ticket_category_id, event_id]
+        `SELECT COUNT(*) as count FROM tickets t
+         JOIN ticket_categories tc ON t.ticket_category_id = tc.id
+         WHERE t.phone = ? AND t.event_id = ? AND tc.identity_type = ?`,
+        [phone, event_id, identityType]
       );
 
-      // 查詢待審查的記錄數量
+      // 查詢該手機號在該活動中，所有屬於該身份類別的待審查記錄數量
       const pendingCount = await dbGet(
         `SELECT COUNT(*) as count FROM pending_list pl
-         JOIN registrations r ON pl.registration_id = r.id
-         WHERE pl.phone = ? AND pl.ticket_category_id = ? AND pl.event_id = ? 
-         AND pl.status = 'pending'`,
-        [phone, ticket_category_id, event_id]
+         JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
+         WHERE pl.phone = ? AND pl.event_id = ? AND pl.status = 'pending' AND tc.identity_type = ?`,
+        [phone, event_id, identityType]
       );
 
       const totalCount = (phoneTicketCount?.count || 0) + (pendingCount?.count || 0);
 
-      if (totalCount >= category.per_phone_limit) {
+      if (totalCount >= eventLimit) {
+        const identityTypeName = identityType === 'vip' ? '貴賓' : '一般';
         return res.status(400).json({ 
-          error: `該手機號已超過限額（每手機號限${category.per_phone_limit}張）` 
+          error: `該手機號已超過限額（每手機號限${eventLimit}張）` 
         });
       }
     }
@@ -262,30 +267,35 @@ async function checkTicketCollection(eventId, categoryId, phone, event) {
     return { success: false, reason: '該類票券已售罄' };
   }
 
-  // 檢查同一手機號是否超過限額（包括已獲取的票券和待審查的記錄）
-  if (category.per_phone_limit > 0) {
-    // 查詢已獲取的票券數量
+  // 檢查同一手機號是否超過限額（根據身份類別檢查該活動的限額）
+  const identityType = category.identity_type || 'general';
+  const limitField = identityType === 'vip' ? 'vip_per_phone_limit' : 'general_per_phone_limit';
+  const eventLimit = event[limitField] || 0;
+
+  if (eventLimit > 0) {
+    // 查詢該手機號在該活動中，所有屬於該身份類別的已獲取票券數量
     const phoneTicketCount = await dbGet(
-      `SELECT COUNT(*) as count FROM tickets 
-       WHERE phone = ? AND ticket_category_id = ? AND event_id = ?`,
-      [phone, categoryId, eventId]
+      `SELECT COUNT(*) as count FROM tickets t
+       JOIN ticket_categories tc ON t.ticket_category_id = tc.id
+       WHERE t.phone = ? AND t.event_id = ? AND tc.identity_type = ?`,
+      [phone, eventId, identityType]
     );
 
-    // 查詢待審查的記錄數量
+    // 查詢該手機號在該活動中，所有屬於該身份類別的待審查記錄數量
     const pendingCount = await dbGet(
       `SELECT COUNT(*) as count FROM pending_list pl
-       JOIN registrations r ON pl.registration_id = r.id
-       WHERE pl.phone = ? AND pl.ticket_category_id = ? AND pl.event_id = ? 
-       AND pl.status = 'pending'`,
-      [phone, categoryId, eventId]
+       JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
+       WHERE pl.phone = ? AND pl.event_id = ? AND pl.status = 'pending' AND tc.identity_type = ?`,
+      [phone, eventId, identityType]
     );
 
     const totalCount = (phoneTicketCount?.count || 0) + (pendingCount?.count || 0);
 
-    if (totalCount >= category.per_phone_limit) {
+    if (totalCount >= eventLimit) {
+      const identityTypeName = identityType === 'vip' ? '貴賓' : '一般';
       return { 
         success: false, 
-        reason: `該手機號已超過限額（每手機號限${category.per_phone_limit}張）` 
+        reason: `該手機號已超過${identityTypeName}身份限額（每手機號限${eventLimit}張）` 
       };
     }
   }

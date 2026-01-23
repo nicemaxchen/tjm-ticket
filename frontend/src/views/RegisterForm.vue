@@ -37,7 +37,7 @@
             <el-option
               v-for="category in categories"
               :key="category.id"
-              :label="`${category.name} (限額: ${category.per_phone_limit}張/手機)`"
+              :label="getCategoryLabel(category)"
               :value="category.id"
             />
           </el-select>
@@ -146,6 +146,7 @@ const router = useRouter();
 const formRef = ref(null);
 const events = ref([]);
 const categories = ref([]);
+const currentEvent = ref(null);
 const countdown = ref(0);
 const showSuccessDialog = ref(false);
 const resultTicket = ref(null);
@@ -193,13 +194,38 @@ const handleEventChange = async (eventId) => {
   form.ticket_category_id = null;
   if (eventId) {
     try {
-      const result = await ticketApi.getCategories(eventId);
-      categories.value = result.categories || [];
+      // 同時獲取活動詳情和類別列表
+      const [eventResult, categoriesResult] = await Promise.all([
+        ticketApi.getEvent(eventId),
+        ticketApi.getCategories(eventId)
+      ]);
+      currentEvent.value = eventResult.event;
+      categories.value = categoriesResult.categories || [];
     } catch (error) {
       ElMessage.error('取得票券類別失敗');
+      categories.value = [];
+      currentEvent.value = null;
     }
   } else {
     categories.value = [];
+    currentEvent.value = null;
+  }
+};
+
+// 獲取類別顯示標籤（包含限額信息）
+const getCategoryLabel = (category) => {
+  if (!currentEvent.value) {
+    return category.name;
+  }
+  
+  const identityType = category.identity_type || 'general';
+  const limitField = identityType === 'vip' ? 'vip_per_phone_limit' : 'general_per_phone_limit';
+  const limit = currentEvent.value[limitField] || 0;
+  
+  if (limit > 0) {
+    return `${category.name} (限額: ${limit}張/手機)`;
+  } else {
+    return `${category.name} (無限制)`;
   }
 };
 

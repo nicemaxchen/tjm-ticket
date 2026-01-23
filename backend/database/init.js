@@ -252,5 +252,28 @@ export function initDatabase() {
     }
   });
 
+  // 為 events 表添加 vip_per_phone_limit 和 general_per_phone_limit 欄位
+  db.run(`ALTER TABLE events ADD COLUMN vip_per_phone_limit INTEGER DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add vip_per_phone_limit column error:', err);
+    }
+  });
+
+  db.run(`ALTER TABLE events ADD COLUMN general_per_phone_limit INTEGER DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add general_per_phone_limit column error:', err);
+    }
+  });
+
+  // 為 ticket_categories 表添加 identity_type 欄位（將 per_phone_limit 改為身份類別）
+  db.run(`ALTER TABLE ticket_categories ADD COLUMN identity_type TEXT DEFAULT 'general'`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add identity_type column error:', err);
+    } else {
+      // 如果欄位已添加，將現有的 per_phone_limit > 1 的類別設為 'vip'（可選的遷移邏輯）
+      // 這裡我們保持默認為 'general'，讓管理員手動設置
+    }
+  });
+
   console.log('✅ Database tables initialized');
 }

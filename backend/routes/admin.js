@@ -34,7 +34,9 @@ router.post('/events', async (req, res) => {
       checkin_end,
       allow_web_collection = false,
       max_attendees = 0,
-      location = ''
+      location = '',
+      vip_per_phone_limit = 0,
+      general_per_phone_limit = 0
     } = req.body;
 
     if (!name) {
@@ -45,12 +47,13 @@ router.post('/events', async (req, res) => {
       `INSERT INTO events 
        (name, description, event_date, ticket_collection_start, 
         ticket_collection_end, checkin_start, checkin_end, allow_web_collection,
-        max_attendees, location)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        max_attendees, location, vip_per_phone_limit, general_per_phone_limit)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name, description, event_date, ticket_collection_start,
         ticket_collection_end, checkin_start, checkin_end, 
-        allow_web_collection ? 1 : 0, max_attendees || 0, location || ''
+        allow_web_collection ? 1 : 0, max_attendees || 0, location || '',
+        vip_per_phone_limit || 0, general_per_phone_limit || 0
       ]
     );
 
@@ -81,7 +84,9 @@ router.put('/events/:id', async (req, res) => {
       checkin_end,
       allow_web_collection,
       max_attendees,
-      location
+      location,
+      vip_per_phone_limit,
+      general_per_phone_limit
     } = req.body;
 
     // 確保資料類型正確
@@ -91,20 +96,26 @@ router.put('/events/:id', async (req, res) => {
     const eventLocation = location !== null && location !== undefined 
       ? String(location) 
       : '';
+    const vipLimit = vip_per_phone_limit !== null && vip_per_phone_limit !== undefined 
+      ? Number(vip_per_phone_limit) 
+      : 0;
+    const generalLimit = general_per_phone_limit !== null && general_per_phone_limit !== undefined 
+      ? Number(general_per_phone_limit) 
+      : 0;
 
-    console.log('更新活動數據:', { id, max_attendees: maxAttendees, location: eventLocation }); // 調試用
+    console.log('更新活動數據:', { id, max_attendees: maxAttendees, location: eventLocation, vip_per_phone_limit: vipLimit, general_per_phone_limit: generalLimit }); // 調試用
 
     await dbRun(
       `UPDATE events 
        SET name = ?, description = ?, event_date = ?, 
            ticket_collection_start = ?, ticket_collection_end = ?,
            checkin_start = ?, checkin_end = ?, allow_web_collection = ?,
-           max_attendees = ?, location = ?
+           max_attendees = ?, location = ?, vip_per_phone_limit = ?, general_per_phone_limit = ?
        WHERE id = ?`,
       [
         name, description, event_date, ticket_collection_start,
         ticket_collection_end, checkin_start, checkin_end,
-        allow_web_collection ? 1 : 0, maxAttendees, eventLocation, id
+        allow_web_collection ? 1 : 0, maxAttendees, eventLocation, vipLimit, generalLimit, id
       ]
     );
 
@@ -184,8 +195,9 @@ router.post('/categories', async (req, res) => {
       description,
       total_limit,
       daily_limit,
-      per_phone_limit,
-      requires_review
+      identity_type,
+      requires_review,
+      allow_collection
     } = req.body;
 
     if (!name) {
@@ -219,6 +231,9 @@ router.post('/categories', async (req, res) => {
       }
     }
 
+    // 驗證身份類別
+    const validIdentityType = identity_type === 'vip' ? 'vip' : 'general';
+
     // 取得該活動的最大 sort_order，新類別排在最後
     const maxOrder = await dbGet(
       'SELECT COALESCE(MAX(sort_order), 0) as max_order FROM ticket_categories WHERE event_id = ?',
@@ -228,9 +243,9 @@ router.post('/categories', async (req, res) => {
 
     const result = await dbRun(
       `INSERT INTO ticket_categories 
-       (event_id, name, description, total_limit, daily_limit, per_phone_limit, requires_review, allow_collection, sort_order)
+       (event_id, name, description, total_limit, daily_limit, identity_type, requires_review, allow_collection, sort_order)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [event_id, name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1, requires_review ? 1 : 0, allow_collection !== undefined ? (allow_collection ? 1 : 0) : 1, newSortOrder]
+      [event_id, name, description, total_limit || 0, daily_limit || 0, validIdentityType, requires_review ? 1 : 0, allow_collection !== undefined ? (allow_collection ? 1 : 0) : 1, newSortOrder]
     );
 
     const category = await dbGet(
@@ -262,7 +277,7 @@ router.put('/categories/:id', async (req, res) => {
       description,
       total_limit,
       daily_limit,
-      per_phone_limit,
+      identity_type,
       requires_review,
       allow_collection
     } = req.body;
@@ -322,9 +337,10 @@ router.put('/categories/:id', async (req, res) => {
       updateFields.push('daily_limit = ?');
       updateValues.push(daily_limit || 0);
     }
-    if (per_phone_limit !== undefined) {
-      updateFields.push('per_phone_limit = ?');
-      updateValues.push(per_phone_limit || 1);
+    if (identity_type !== undefined) {
+      const validIdentityType = identity_type === 'vip' ? 'vip' : 'general';
+      updateFields.push('identity_type = ?');
+      updateValues.push(validIdentityType);
     }
     if (requires_review !== undefined) {
       updateFields.push('requires_review = ?');
