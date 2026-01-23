@@ -54,6 +54,7 @@ export const adminApi = {
   getCategories: (eventId) => api.get('/admin/categories', { params: eventId ? { event_id: eventId } : {} }),
   createCategory: (data) => api.post('/admin/categories', data),
   updateCategory: (id, data) => api.put(`/admin/categories/${id}`, data),
+  updateCategoryOrder: (categoryIds) => api.put('/admin/categories/update-order', { categoryIds }),
   deleteCategory: (id) => api.delete(`/admin/categories/${id}`),
   
   // 待審核名單

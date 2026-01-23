@@ -134,7 +134,7 @@ router.get('/categories', async (req, res) => {
       params.push(event_id);
     }
     
-    sql += ' ORDER BY tc.id';
+    sql += ' ORDER BY tc.sort_order ASC, tc.id ASC';
     
     const categories = await dbAll(sql, params);
 
@@ -145,6 +145,33 @@ router.get('/categories', async (req, res) => {
   } catch (error) {
     console.error('取得票券類別錯誤:', error);
     res.status(500).json({ error: '取得失敗' });
+  }
+});
+
+// 更新類別排序（必須在 /categories/:id 之前）
+router.put('/categories/update-order', async (req, res) => {
+  try {
+    const { categoryIds } = req.body;
+
+    if (!Array.isArray(categoryIds)) {
+      return res.status(400).json({ error: 'categoryIds 必須是陣列' });
+    }
+
+    // 使用事務更新所有類別的排序
+    for (let i = 0; i < categoryIds.length; i++) {
+      await dbRun(
+        'UPDATE ticket_categories SET sort_order = ? WHERE id = ?',
+        [i + 1, categoryIds[i]]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: '排序更新成功'
+    });
+  } catch (error) {
+    console.error('更新類別排序錯誤:', error);
+    res.status(500).json({ error: '更新排序失敗' });
   }
 });
 
@@ -192,11 +219,18 @@ router.post('/categories', async (req, res) => {
       }
     }
 
+    // 取得該活動的最大 sort_order，新類別排在最後
+    const maxOrder = await dbGet(
+      'SELECT COALESCE(MAX(sort_order), 0) as max_order FROM ticket_categories WHERE event_id = ?',
+      [event_id]
+    );
+    const newSortOrder = (maxOrder?.max_order || 0) + 1;
+
     const result = await dbRun(
       `INSERT INTO ticket_categories 
-       (event_id, name, description, total_limit, daily_limit, per_phone_limit, requires_review)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [event_id, name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1, requires_review ? 1 : 0]
+       (event_id, name, description, total_limit, daily_limit, per_phone_limit, requires_review, allow_collection, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [event_id, name, description, total_limit || 0, daily_limit || 0, per_phone_limit || 1, requires_review ? 1 : 0, allow_collection !== undefined ? (allow_collection ? 1 : 0) : 1, newSortOrder]
     );
 
     const category = await dbGet(
@@ -229,7 +263,8 @@ router.put('/categories/:id', async (req, res) => {
       total_limit,
       daily_limit,
       per_phone_limit,
-      requires_review
+      requires_review,
+      allow_collection
     } = req.body;
 
     // 取得當前類別資訊
@@ -294,6 +329,10 @@ router.put('/categories/:id', async (req, res) => {
     if (requires_review !== undefined) {
       updateFields.push('requires_review = ?');
       updateValues.push(requires_review ? 1 : 0);
+    }
+    if (allow_collection !== undefined) {
+      updateFields.push('allow_collection = ?');
+      updateValues.push(allow_collection ? 1 : 0);
     }
 
     updateValues.push(id);

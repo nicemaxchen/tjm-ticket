@@ -20,20 +20,20 @@ router.get('/events', async (req, res) => {
   }
 });
 
-// 取得票券類別列表
+// 取得票券類別列表（只返回開放索票的類別）
 router.get('/categories', async (req, res) => {
   try {
     const { event_id } = req.query;
     
-    let sql = 'SELECT * FROM ticket_categories';
+    let sql = 'SELECT * FROM ticket_categories WHERE (allow_collection = 1 OR allow_collection IS NULL)';
     const params = [];
     
     if (event_id) {
-      sql += ' WHERE event_id = ?';
+      sql += ' AND event_id = ?';
       params.push(event_id);
     }
     
-    sql += ' ORDER BY id';
+    sql += ' ORDER BY sort_order ASC, id ASC';
     
     const categories = await dbAll(sql, params);
 
@@ -58,9 +58,9 @@ router.get('/events/:id', async (req, res) => {
       return res.status(404).json({ error: '活動不存在' });
     }
 
-    // 取得該活動的票券類別
+    // 取得該活動的票券類別（只返回開放索票的類別）
     const categories = await dbAll(
-      'SELECT * FROM ticket_categories WHERE event_id = ? ORDER BY id',
+      'SELECT * FROM ticket_categories WHERE event_id = ? AND (allow_collection = 1 OR allow_collection IS NULL) ORDER BY sort_order ASC, id ASC',
       [id]
     );
 

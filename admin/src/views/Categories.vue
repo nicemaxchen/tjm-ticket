@@ -61,33 +61,49 @@
       </div>
 
       <el-table 
+        ref="tableRef"
         :data="categories" 
         border 
         style="width: 100%" 
         v-if="selectedEventId"
-        default-sort="{ prop: 'name', order: 'ascending' }"
+        row-key="id"
+        class="draggable-table"
       >
-        <el-table-column prop="name" label="類別名稱" width="200" sortable />
+        <el-table-column label="" width="50" align="center">
+          <template #default>
+            <el-icon class="drag-handle" style="cursor: move; color: #909399;">
+              <Rank />
+            </el-icon>
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="類別名稱" width="200" />
         <el-table-column prop="description" label="描述" />
-        <el-table-column prop="total_limit" label="總限額" width="100" sortable>
+        <el-table-column prop="total_limit" label="總限額" width="100">
           <template #default="{ row }">
             {{ row.total_limit || '無限制' }}
           </template>
         </el-table-column>
-        <el-table-column prop="daily_limit" label="每日限額" width="100" sortable>
+        <el-table-column prop="daily_limit" label="每日限額" width="100">
           <template #default="{ row }">
             {{ row.daily_limit || '無限制' }}
           </template>
         </el-table-column>
-        <el-table-column prop="per_phone_limit" label="每手機號限額" width="120" sortable>
+        <el-table-column prop="per_phone_limit" label="每手機號限額" width="120">
           <template #default="{ row }">
             {{ row.per_phone_limit || 1 }}
           </template>
         </el-table-column>
-        <el-table-column prop="requires_review" label="需審查" width="100" sortable>
+        <el-table-column prop="requires_review" label="需審查" width="100">
           <template #default="{ row }">
             <el-tag :type="row.requires_review ? 'warning' : 'success'">
               {{ row.requires_review ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="allow_collection" label="開放索票" width="100">
+          <template #default="{ row }">
+            <el-tag :type="(row.allow_collection === 1 || row.allow_collection === true || row.allow_collection === null || row.allow_collection === undefined) ? 'success' : 'info'">
+              {{ (row.allow_collection === 1 || row.allow_collection === true || row.allow_collection === null || row.allow_collection === undefined) ? '是' : '否' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -201,8 +217,19 @@
             active-text="是"
             inactive-text="否"
           />
-          <div class="form-tip">
+          <div class="form-tip form-tip-right">
             開啟後，報名此類別的資料將進入待審查名單
+          </div>
+        </el-form-item>
+
+        <el-form-item label="是否開放索票" prop="allow_collection">
+          <el-switch
+            v-model="form.allow_collection"
+            active-text="是"
+            inactive-text="否"
+          />
+          <div class="form-tip form-tip-right">
+            開啟後，報名此類別可直接取得票券，無需審查
           </div>
         </el-form-item>
       </el-form>
@@ -216,8 +243,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { Rank } from '@element-plus/icons-vue';
+import Sortable from 'sortablejs';
 import { adminApi } from '../api';
 
 const categories = ref([]);
@@ -227,7 +256,9 @@ const selectedEvent = ref(null);
 const showDialog = ref(false);
 const dialogTitle = ref('新增類別');
 const formRef = ref(null);
+const tableRef = ref(null);
 const editingId = ref(null);
+let sortableInstance = null;
 
 const form = reactive({
   event_id: null,
@@ -236,7 +267,8 @@ const form = reactive({
   total_limit: 0,
   daily_limit: 0,
   per_phone_limit: 1,
-  requires_review: false
+  requires_review: false,
+  allow_collection: true
 });
 
 const rules = {
@@ -330,12 +362,64 @@ const loadCategories = async (eventId = null) => {
       // 如果沒有類別，直接從 events 中取得活動資訊
       selectedEvent.value = events.value.find(e => e.id === eventId);
     }
+    
+    // 初始化拖拽排序
+    await nextTick();
+    initSortable();
   } catch (error) {
     ElMessage.error('載入類別列表失敗');
   }
 };
 
+// 初始化拖拽排序
+const initSortable = () => {
+  if (sortableInstance) {
+    sortableInstance.destroy();
+    sortableInstance = null;
+  }
+  
+  if (!tableRef.value || !selectedEventId.value) return;
+  
+  const tbody = tableRef.value.$el.querySelector('.el-table__body-wrapper tbody');
+  if (!tbody) return;
+  
+  sortableInstance = Sortable.create(tbody, {
+    handle: '.drag-handle',
+    animation: 150,
+    onEnd: async (evt) => {
+      const { oldIndex, newIndex } = evt;
+      if (oldIndex === newIndex) return;
+      
+      // 更新本地数组顺序
+      const movedItem = categories.value.splice(oldIndex, 1)[0];
+      categories.value.splice(newIndex, 0, movedItem);
+      
+      // 保存排序到数据库
+      await saveCategoryOrder();
+    }
+  });
+};
+
+// 保存類別排序
+const saveCategoryOrder = async () => {
+  try {
+    const categoryIds = categories.value.map(cat => cat.id);
+    await adminApi.updateCategoryOrder(categoryIds);
+    ElMessage.success('排序已更新');
+  } catch (error) {
+    ElMessage.error('更新排序失敗');
+    // 如果失败，重新加载列表
+    await loadCategories(selectedEventId.value);
+  }
+};
+
 const handleEventChange = async (eventId) => {
+  // 销毁旧的拖拽实例
+  if (sortableInstance) {
+    sortableInstance.destroy();
+    sortableInstance = null;
+  }
+  
   selectedEventId.value = eventId;
   if (eventId) {
     selectedEvent.value = events.value.find(e => e.id === eventId);
@@ -376,7 +460,8 @@ const handleEdit = (row) => {
     total_limit: row.total_limit || 0,
     daily_limit: row.daily_limit || 0,
     per_phone_limit: row.per_phone_limit || 1,
-    requires_review: row.requires_review ? true : false
+    requires_review: row.requires_review ? true : false,
+    allow_collection: (row.allow_collection === 1 || row.allow_collection === true || row.allow_collection === null || row.allow_collection === undefined) ? true : false
   });
   // 確保活動資訊已載入
   if (row.event_id && !selectedEvent.value) {
@@ -433,7 +518,8 @@ const resetForm = () => {
     total_limit: 0,
     daily_limit: 0,
     per_phone_limit: 1,
-    requires_review: false
+    requires_review: false,
+    allow_collection: true
   });
   formRef.value?.resetFields();
 };
@@ -456,6 +542,10 @@ const resetForm = () => {
   margin-top: 5px;
 }
 
+.form-tip-right {
+  text-align: right;
+}
+
 .form-warning {
   font-size: 12px;
   margin-top: 5px;
@@ -467,5 +557,25 @@ const resetForm = () => {
 
 .event-limit-info {
   margin-top: 10px;
+}
+
+.drag-handle {
+  cursor: move;
+  font-size: 18px;
+  color: #909399;
+  user-select: none;
+}
+
+.drag-handle:hover {
+  color: #409eff;
+}
+
+.draggable-table :deep(.sortable-ghost) {
+  opacity: 0.5;
+  background: #f0f0f0;
+}
+
+.draggable-table :deep(.sortable-chosen) {
+  cursor: move;
 }
 </style>

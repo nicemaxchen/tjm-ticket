@@ -231,5 +231,26 @@ export function initDatabase() {
     }
   });
 
+  // 為 ticket_categories 表添加 sort_order 欄位
+  db.run(`ALTER TABLE ticket_categories ADD COLUMN sort_order INTEGER DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add sort_order column error:', err);
+    } else {
+      // 如果欄位已添加，為現有記錄設置初始排序值
+      db.run(`UPDATE ticket_categories SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL`, (err) => {
+        if (err) {
+          console.error('❌ Initialize sort_order error:', err);
+        }
+      });
+    }
+  });
+
+  // 為 ticket_categories 表添加 allow_collection 欄位
+  db.run(`ALTER TABLE ticket_categories ADD COLUMN allow_collection BOOLEAN DEFAULT 1`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add allow_collection column error:', err);
+    }
+  });
+
   console.log('✅ Database tables initialized');
 }
