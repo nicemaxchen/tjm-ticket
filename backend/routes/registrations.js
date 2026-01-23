@@ -88,6 +88,33 @@ router.post('/register', async (req, res) => {
       return res.status(404).json({ error: '票券類別不存在' });
     }
 
+    // 檢查同一手機號是否超過限額（包括已獲取的票券和待審查的記錄）
+    if (category.per_phone_limit > 0) {
+      // 查詢已獲取的票券數量
+      const phoneTicketCount = await dbGet(
+        `SELECT COUNT(*) as count FROM tickets 
+         WHERE phone = ? AND ticket_category_id = ? AND event_id = ?`,
+        [phone, ticket_category_id, event_id]
+      );
+
+      // 查詢待審查的記錄數量
+      const pendingCount = await dbGet(
+        `SELECT COUNT(*) as count FROM pending_list pl
+         JOIN registrations r ON pl.registration_id = r.id
+         WHERE pl.phone = ? AND pl.ticket_category_id = ? AND pl.event_id = ? 
+         AND pl.status = 'pending'`,
+        [phone, ticket_category_id, event_id]
+      );
+
+      const totalCount = (phoneTicketCount?.count || 0) + (pendingCount?.count || 0);
+
+      if (totalCount >= category.per_phone_limit) {
+        return res.status(400).json({ 
+          error: `該手機號已超過限額（每手機號限${category.per_phone_limit}張）` 
+        });
+      }
+    }
+
     // 建立或取得使用者
     let user = await dbGet('SELECT * FROM users WHERE phone = ?', [phone]);
     
@@ -235,19 +262,32 @@ async function checkTicketCollection(eventId, categoryId, phone, event) {
     return { success: false, reason: '該類票券已售罄' };
   }
 
-  // 檢查同一手機號是否超過限額
-  const phoneTicketCount = await dbGet(
-    `SELECT COUNT(*) as count FROM tickets 
-     WHERE phone = ? AND ticket_category_id = ? AND event_id = ?`,
-    [phone, categoryId, eventId]
-  );
+  // 檢查同一手機號是否超過限額（包括已獲取的票券和待審查的記錄）
+  if (category.per_phone_limit > 0) {
+    // 查詢已獲取的票券數量
+    const phoneTicketCount = await dbGet(
+      `SELECT COUNT(*) as count FROM tickets 
+       WHERE phone = ? AND ticket_category_id = ? AND event_id = ?`,
+      [phone, categoryId, eventId]
+    );
 
-  if (category.per_phone_limit > 0 && 
-      phoneTicketCount.count >= category.per_phone_limit) {
-    return { 
-      success: false, 
-      reason: `該手機號已超過限額（每手機號限${category.per_phone_limit}張）` 
-    };
+    // 查詢待審查的記錄數量
+    const pendingCount = await dbGet(
+      `SELECT COUNT(*) as count FROM pending_list pl
+       JOIN registrations r ON pl.registration_id = r.id
+       WHERE pl.phone = ? AND pl.ticket_category_id = ? AND pl.event_id = ? 
+       AND pl.status = 'pending'`,
+      [phone, categoryId, eventId]
+    );
+
+    const totalCount = (phoneTicketCount?.count || 0) + (pendingCount?.count || 0);
+
+    if (totalCount >= category.per_phone_limit) {
+      return { 
+        success: false, 
+        reason: `該手機號已超過限額（每手機號限${category.per_phone_limit}張）` 
+      };
+    }
   }
 
   return { success: true };
