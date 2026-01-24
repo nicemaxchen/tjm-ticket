@@ -558,7 +558,7 @@ router.get('/statistics', async (req, res) => {
 
     if (event_id) {
       tickets = await dbAll(
-        `SELECT t.*, tc.name as category_name, e.name as event_name, e.max_attendees,
+        `SELECT t.*, tc.name as category_name, tc.identity_type, e.name as event_name, e.max_attendees,
                 COALESCE(u.name, pl.name) as user_name,
                 COALESCE(u.email, pl.email) as email,
                 COALESCE(r.created_at, pl.created_at) as registration_time
@@ -585,7 +585,7 @@ router.get('/statistics', async (req, res) => {
       pendingCount = pendingCountResult ? (pendingCountResult.count || 0) : 0;
     } else {
       tickets = await dbAll(
-        `SELECT t.*, tc.name as category_name, e.name as event_name, e.max_attendees,
+        `SELECT t.*, tc.name as category_name, tc.identity_type, e.name as event_name, e.max_attendees,
                 COALESCE(u.name, pl.name) as user_name,
                 COALESCE(u.email, pl.email) as email,
                 COALESCE(r.created_at, pl.created_at) as registration_time
@@ -683,20 +683,39 @@ router.get('/statistics/by-events', async (req, res) => {
     const events = await dbAll('SELECT * FROM events ORDER BY event_date DESC');
     
     const eventStats = await Promise.all(events.map(async (event) => {
+      // 查詢票券，包含身份類別
       const tickets = await dbAll(
-        `SELECT * FROM tickets WHERE event_id = ?`,
+        `SELECT t.*, tc.identity_type 
+         FROM tickets t
+         JOIN ticket_categories tc ON t.ticket_category_id = tc.id
+         WHERE t.event_id = ?`,
         [event.id]
       );
       
-      const pendingCountResult = await dbGet(
-        `SELECT COUNT(*) as count FROM pending_list WHERE event_id = ? AND status = 'pending'`,
+      // 查詢待審核，包含身份類別
+      const pendingList = await dbAll(
+        `SELECT pl.*, tc.identity_type 
+         FROM pending_list pl
+         JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
+         WHERE pl.event_id = ? AND pl.status = 'pending'`,
         [event.id]
       );
-
+      
       const total = tickets.length;
       const checked = tickets.filter(t => t.checkin_status === 'checked').length;
       const unchecked = total - checked;
-      const pendingCount = pendingCountResult ? (pendingCountResult.count || 0) : 0;
+      const pendingCount = pendingList.length;
+
+      // 按身份分類統計
+      const vipTickets = tickets.filter(t => t.identity_type === 'vip');
+      const generalTickets = tickets.filter(t => t.identity_type === 'general');
+      const vipChecked = vipTickets.filter(t => t.checkin_status === 'checked').length;
+      const vipUnchecked = vipTickets.length - vipChecked;
+      const generalChecked = generalTickets.filter(t => t.checkin_status === 'checked').length;
+      const generalUnchecked = generalTickets.length - generalChecked;
+      
+      const vipPending = pendingList.filter(p => p.identity_type === 'vip').length;
+      const generalPending = pendingList.filter(p => p.identity_type === 'general').length;
 
       return {
         event_id: event.id,
@@ -706,7 +725,17 @@ router.get('/statistics/by-events', async (req, res) => {
         totalTickets: total,
         checkedTickets: checked,
         uncheckedTickets: unchecked,
-        pendingCount: pendingCount
+        pendingCount: pendingCount,
+        // 貴賓身份統計
+        vipTotal: vipTickets.length,
+        vipChecked: vipChecked,
+        vipUnchecked: vipUnchecked,
+        vipPending: vipPending,
+        // 一般身份統計
+        generalTotal: generalTickets.length,
+        generalChecked: generalChecked,
+        generalUnchecked: generalUnchecked,
+        generalPending: generalPending
       };
     }));
 
