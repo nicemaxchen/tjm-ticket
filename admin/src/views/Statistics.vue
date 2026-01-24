@@ -22,7 +22,30 @@
           <div class="header-center" v-if="selectedEventName">
             <h2 class="event-title">{{ selectedEventName }}</h2>
           </div>
-          <div class="header-right"></div>
+          <div class="header-right header-filters">
+            <el-select
+              v-model="filterCategoryDetail"
+              placeholder="票券類別"
+              clearable
+              style="width: 140px; margin-left: 8px;"
+            >
+              <el-option
+                v-for="c in uniqueCategoriesTickets"
+                :key="c"
+                :label="c"
+                :value="c"
+              />
+            </el-select>
+            <el-select
+              v-model="filterCheckinStatus"
+              placeholder="報到狀態"
+              clearable
+              style="width: 120px; margin-left: 8px;"
+            >
+              <el-option label="已報到" value="checked" />
+              <el-option label="未報到" value="unchecked" />
+            </el-select>
+          </div>
         </div>
       </template>
 
@@ -64,14 +87,14 @@
         </el-col>
       </el-row>
 
-      <el-table :data="tickets" border style="width: 100%">
-        <el-table-column prop="user_name" label="姓名" width="120" header-align="center">
+      <el-table :data="filteredTickets" border style="width: 100%">
+        <el-table-column prop="user_name" label="姓名" width="120" header-align="center" sortable>
           <template #default="{ row }">
             {{ row.user_name || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="category_name" label="票券類別" width="120" header-align="center" />
-        <el-table-column prop="phone" label="手機號" width="130" header-align="center" />
+        <el-table-column prop="category_name" label="票券類別" width="120" header-align="center" sortable />
+        <el-table-column prop="phone" label="手機號" width="130" header-align="center" sortable />
         <!-- <el-table-column label="同手機申請數" width="140" header-align="center">
           <template #default="{ row }">
             <span v-if="phoneCounts[row.phone]">
@@ -80,24 +103,24 @@
             <span v-else>—</span>
           </template>
         </el-table-column> -->
-        <el-table-column prop="email" label="Email" width="160" header-align="center">
+        <el-table-column prop="email" label="Email" width="160" header-align="center" sortable>
           <template #default="{ row }">
             {{ row.email || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="registration_time" label="報名時間" width="180" header-align="center">
+        <el-table-column prop="registration_time" label="報名時間" width="180" header-align="center" sortable>
           <template #default="{ row }">
             {{ formatDate(row.registration_time || row.created_at) }}
           </template>
         </el-table-column>        
-        <el-table-column prop="checkin_status" label="報到狀態" width="120" header-align="center">
+        <el-table-column prop="checkin_status" label="報到狀態" width="120" header-align="center" sortable>
           <template #default="{ row }">
             <el-tag :type="row.checkin_status === 'checked' ? 'success' : 'info'">
               {{ row.checkin_status === 'checked' ? '已報到' : '未報到' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="checkin_time" label="報到時間" width="180" header-align="center">
+        <el-table-column prop="checkin_time" label="報到時間" width="180" header-align="center" sortable>
           <template #default="{ row }">
             {{ row.checkin_time ? formatDate(row.checkin_time) : '-' }}
           </template>
@@ -118,12 +141,27 @@
     <!-- 待審查列表 -->
     <el-card style="margin-top: 20px;" v-if="selectedEventId">
       <template #header>
-        <span>待審查列表</span>
+        <div class="pending-header">
+          <span>待審查列表</span>
+          <el-select
+            v-model="filterCategoryPending"
+            placeholder="票券類別"
+            clearable
+            style="width: 160px;"
+          >
+            <el-option
+              v-for="c in uniqueCategoriesPending"
+              :key="c"
+              :label="c"
+              :value="c"
+            />
+          </el-select>
+        </div>
       </template>
-      <el-table :data="pendingList" border style="width: 100%">
-        <el-table-column prop="name" label="姓名" width="120" header-align="center" />
-        <el-table-column prop="category_name" label="票券類別" width="150" header-align="center" />
-        <el-table-column prop="phone" label="手機號" width="130" header-align="center" />
+      <el-table :data="filteredPendingList" border style="width: 100%">
+        <el-table-column prop="name" label="姓名" width="120" header-align="center" sortable />
+        <el-table-column prop="category_name" label="票券類別" width="150" header-align="center" sortable />
+        <el-table-column prop="phone" label="手機號" width="130" header-align="center" sortable />
         <el-table-column label="同手機申請數" width="160" header-align="center">
           <template #default="{ row }">
             <span v-if="phoneCounts[row.phone]">
@@ -132,8 +170,8 @@
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="email" label="Email" header-align="center" />
-        <el-table-column prop="created_at" label="報名時間" width="180" header-align="center">
+        <el-table-column prop="email" label="Email" header-align="center" sortable />
+        <el-table-column prop="created_at" label="報名時間" width="180" header-align="center" sortable>
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
@@ -174,6 +212,44 @@ const statistics = reactive({
 });
 const tickets = ref([]);
 const pendingList = ref([]);
+const filterCategoryDetail = ref('');
+const filterCheckinStatus = ref('');
+const filterCategoryPending = ref('');
+
+const uniqueCategoriesTickets = computed(() => {
+  const set = new Set();
+  tickets.value.forEach((r) => {
+    if (r.category_name) set.add(r.category_name);
+  });
+  return [...set].sort();
+});
+
+const uniqueCategoriesPending = computed(() => {
+  const set = new Set();
+  pendingList.value.forEach((r) => {
+    if (r.category_name) set.add(r.category_name);
+  });
+  return [...set].sort();
+});
+
+const filteredTickets = computed(() => {
+  let list = tickets.value;
+  if (filterCategoryDetail.value) {
+    list = list.filter((r) => r.category_name === filterCategoryDetail.value);
+  }
+  if (filterCheckinStatus.value) {
+    list = list.filter((r) => r.checkin_status === filterCheckinStatus.value);
+  }
+  return list;
+});
+
+const filteredPendingList = computed(() => {
+  let list = pendingList.value;
+  if (filterCategoryPending.value) {
+    list = list.filter((r) => r.category_name === filterCategoryPending.value);
+  }
+  return list;
+});
 
 const phoneCounts = computed(() => {
   const map = {};
@@ -251,7 +327,10 @@ const loadEvents = async () => {
 const handleEventChange = () => {
   // 更新活動名稱
   updateSelectedEventName();
-  
+  // 切換活動時重置過濾器
+  filterCategoryDetail.value = '';
+  filterCheckinStatus.value = '';
+  filterCategoryPending.value = '';
   // 當選擇活動改變時，更新 URL 參數
   if (selectedEventId.value) {
     router.replace({
@@ -396,7 +475,20 @@ const formatDate = (dateString) => {
 }
 
 .header-right {
-  width: 320px; /* 與左側寬度相同，用於平衡布局 */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 280px;
+}
+
+.header-filters {
+  gap: 0;
+}
+
+.pending-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .event-title {

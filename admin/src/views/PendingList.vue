@@ -2,14 +2,44 @@
   <div class="pending-list">
     <el-card>
       <template #header>
-        <span>待審核名單</span>
+        <div class="card-header">
+          <span>待審核名單</span>
+          <div class="header-filters">
+            <el-select
+              v-model="filterEvent"
+              placeholder="活動"
+              clearable
+              style="width: 200px; margin-left: 8px;"
+            >
+              <el-option
+                v-for="e in uniqueEvents"
+                :key="e"
+                :label="e"
+                :value="e"
+              />
+            </el-select>
+            <el-select
+              v-model="filterCategory"
+              placeholder="票券類別"
+              clearable
+              style="width: 160px; margin-left: 8px;"
+            >
+              <el-option
+                v-for="c in uniqueCategories"
+                :key="c"
+                :label="c"
+                :value="c"
+              />
+            </el-select>
+          </div>
+        </div>
       </template>
 
-      <el-table :data="pendingList" border style="width: 100%">
-        <el-table-column prop="event_name" label="活動" width="160" header-align="center" />
-        <el-table-column prop="name" label="姓名" width="100" header-align="center" />
-        <el-table-column prop="category_name" label="票券類別" width="120" header-align="center" />
-        <el-table-column prop="phone" label="手機號" width="130" header-align="center" />
+      <el-table :data="filteredPendingList" border style="width: 100%">
+        <el-table-column prop="event_name" label="活動" width="160" header-align="center" sortable />
+        <el-table-column prop="name" label="姓名" width="100" header-align="center" sortable />
+        <el-table-column prop="category_name" label="票券類別" width="120" header-align="center" sortable />
+        <el-table-column prop="phone" label="手機號" width="130" header-align="center" sortable />
         <el-table-column label="同手機申請數" width="140" header-align="center">
           <template #default="{ row }">
             <span v-if="phoneCounts[row.phone]">
@@ -18,9 +48,9 @@
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="email" label="Email" header-align="center" />
+        <el-table-column prop="email" label="Email" header-align="center" sortable />
         
-        <el-table-column prop="created_at" label="申請時間" width="180" header-align="center">
+        <el-table-column prop="created_at" label="申請時間" width="180" header-align="center" sortable>
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
@@ -93,15 +123,44 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { adminApi } from '../api';
 
 const pendingList = ref([]);
 const phoneCounts = ref({});
+const filterEvent = ref('');
+const filterCategory = ref('');
 const showApproveDialog = ref(false);
 const showRejectDialog = ref(false);
 const currentId = ref(null);
+
+const uniqueEvents = computed(() => {
+  const set = new Set();
+  pendingList.value.forEach((r) => {
+    if (r.event_name) set.add(r.event_name);
+  });
+  return [...set].sort();
+});
+
+const uniqueCategories = computed(() => {
+  const set = new Set();
+  pendingList.value.forEach((r) => {
+    if (r.category_name) set.add(r.category_name);
+  });
+  return [...set].sort();
+});
+
+const filteredPendingList = computed(() => {
+  let list = pendingList.value;
+  if (filterEvent.value) {
+    list = list.filter((r) => r.event_name === filterEvent.value);
+  }
+  if (filterCategory.value) {
+    list = list.filter((r) => r.category_name === filterCategory.value);
+  }
+  return list;
+});
 
 const approveForm = reactive({
   notes: ''
@@ -187,6 +246,17 @@ const formatDate = (dateString) => {
 <style scoped>
 .pending-list {
   padding: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-filters {
+  display: flex;
+  align-items: center;
 }
 
 /* 表格標題樣式 */
