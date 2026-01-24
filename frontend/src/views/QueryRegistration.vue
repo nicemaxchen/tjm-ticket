@@ -39,46 +39,10 @@
       </el-form>
 
       <div v-if="verified">
-        <!-- 待審查記錄 -->
-        <div v-if="pendingRegistrations.length > 0" style="margin-bottom: 30px;">
-          <el-alert
-            title="審查中"
-            type="warning"
-            :closable="false"
-            style="margin-bottom: 20px"
-          />
-          <div class="ticket-list">
-            <el-card 
-              v-for="(item, index) in pendingRegistrations" 
-              :key="index"
-              class="ticket-card"
-              shadow="hover"
-            >
-              <el-descriptions :column="1" border>
-                <el-descriptions-item label="活動名稱">
-                  {{ item.event_name }}
-                </el-descriptions-item>
-                <el-descriptions-item label="活動地點" v-if="item.event_location">
-                  {{ item.event_location }}
-                </el-descriptions-item>
-                <el-descriptions-item label="票券類別">
-                  {{ item.category_name }}
-                </el-descriptions-item>
-                <el-descriptions-item label="狀態">
-                  <el-tag type="warning">審查中</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="報名時間">
-                  {{ formatDate(item.created_at) }}
-                </el-descriptions-item>
-              </el-descriptions>
-            </el-card>
-          </div>
-        </div>
-
         <!-- 已通過審查的票券 -->
-        <div v-if="tickets.length > 0">
+        <div v-if="tickets.length > 0" style="margin-bottom: 30px;">
           <el-alert
-            title="查詢成功"
+            title="已通過審查"
             type="success"
             :closable="false"
             style="margin-bottom: 20px"
@@ -131,8 +95,86 @@
           </div>
         </div>
 
+        <!-- 待審查記錄 -->
+        <div v-if="pendingRegistrations.length > 0" style="margin-bottom: 30px;">
+          <el-alert
+            title="審查中"
+            type="warning"
+            :closable="false"
+            style="margin-bottom: 20px"
+          />
+          <div class="ticket-list">
+            <el-card 
+              v-for="(item, index) in pendingRegistrations" 
+              :key="index"
+              class="ticket-card"
+              shadow="hover"
+            >
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="活動名稱">
+                  {{ item.event_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="活動地點" v-if="item.event_location">
+                  {{ item.event_location }}
+                </el-descriptions-item>
+                <el-descriptions-item label="票券類別">
+                  {{ item.category_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="狀態">
+                  <el-tag type="warning">審查中</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="報名時間">
+                  {{ formatDate(item.created_at) }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+          </div>
+        </div>
+
+        <!-- 被拒絕記錄 -->
+        <div v-if="rejectedRegistrations.length > 0" style="margin-bottom: 30px;">
+          <el-alert
+            title="審核不通過"
+            type="error"
+            :closable="false"
+            style="margin-bottom: 20px"
+          />
+          <div class="ticket-list">
+            <el-card 
+              v-for="(item, index) in rejectedRegistrations" 
+              :key="index"
+              class="ticket-card"
+              shadow="hover"
+            >
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="活動名稱">
+                  {{ item.event_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="活動地點" v-if="item.event_location">
+                  {{ item.event_location }}
+                </el-descriptions-item>
+                <el-descriptions-item label="票券類別">
+                  {{ item.category_name }}
+                </el-descriptions-item>
+                <el-descriptions-item label="狀態">
+                  <el-tag type="danger">審核不通過</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="報名時間">
+                  {{ formatDate(item.created_at) }}
+                </el-descriptions-item>
+                <el-descriptions-item label="拒絕原因" v-if="item.rejection_reason">
+                  <div style="color: #f56c6c; white-space: pre-wrap;">{{ item.rejection_reason }}</div>
+                </el-descriptions-item>
+                <el-descriptions-item label="拒絕原因" v-else>
+                  <span style="color: #909399;">無備註</span>
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+          </div>
+        </div>
+
         <!-- 如果沒有任何記錄 -->
-        <div v-if="tickets.length === 0 && pendingRegistrations.length === 0">
+        <div v-if="tickets.length === 0 && pendingRegistrations.length === 0 && rejectedRegistrations.length === 0">
           <el-alert
             title="查詢結果"
             type="info"
@@ -201,6 +243,7 @@ const showVerificationCode = ref(false);
 const countdown = ref(0);
 const tickets = ref([]);
 const pendingRegistrations = ref([]);
+const rejectedRegistrations = ref([]);
 const showTicketDialog = ref(false);
 const selectedTicket = ref(null);
 
@@ -258,12 +301,19 @@ const handleVerify = async () => {
     const result = await registrationApi.queryRegistration(form.phone);
     tickets.value = result.tickets || [];
     pendingRegistrations.value = result.pendingRegistrations || [];
+    rejectedRegistrations.value = result.rejectedRegistrations || [];
     verified.value = true;
     
-    if (result.tickets.length === 0 && result.pendingRegistrations.length === 0) {
+    if (result.tickets.length === 0 && result.pendingRegistrations.length === 0 && result.rejectedRegistrations.length === 0) {
       ElMessage.info('未找到相關報名記錄');
-    } else if (result.pendingRegistrations.length > 0) {
-      ElMessage.info(`找到 ${result.pendingRegistrations.length} 筆審查中的記錄`);
+    } else {
+      const messages = [];
+      if (result.tickets.length > 0) messages.push(`${result.tickets.length} 筆已通過`);
+      if (result.pendingRegistrations.length > 0) messages.push(`${result.pendingRegistrations.length} 筆審查中`);
+      if (result.rejectedRegistrations.length > 0) messages.push(`${result.rejectedRegistrations.length} 筆不通過`);
+      if (messages.length > 0) {
+        ElMessage.info(`找到 ${messages.join('、')} 的記錄`);
+      }
     }
   } catch (error) {
     ElMessage.error(error.message || '驗證失敗');
@@ -307,6 +357,7 @@ const reset = () => {
   showVerificationCode.value = false;
   tickets.value = [];
   pendingRegistrations.value = [];
+  rejectedRegistrations.value = [];
   countdown.value = 0;
 };
 

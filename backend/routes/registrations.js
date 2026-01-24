@@ -41,10 +41,26 @@ router.post('/query', async (req, res) => {
       [phone]
     );
 
+    // 查詢該手機號下的被拒絕記錄
+    const rejectedRegistrations = await dbAll(
+      `SELECT pl.*, e.name as event_name, e.location as event_location,
+              tc.name as category_name,
+              r.status as registration_status,
+              pl.admin_notes as rejection_reason
+       FROM pending_list pl
+       JOIN events e ON pl.event_id = e.id
+       JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
+       JOIN registrations r ON pl.registration_id = r.id
+       WHERE pl.phone = ? AND pl.status = 'rejected'
+       ORDER BY pl.reviewed_at DESC, pl.created_at DESC`,
+      [phone]
+    );
+
     res.json({
       success: true,
       tickets: tickets || [],
-      pendingRegistrations: pendingRegistrations || []
+      pendingRegistrations: pendingRegistrations || [],
+      rejectedRegistrations: rejectedRegistrations || []
     });
   } catch (error) {
     console.error('查詢報名資料錯誤:', error);
