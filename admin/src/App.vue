@@ -32,11 +32,12 @@ import { ElMessageBox } from 'element-plus';
 const router = useRouter();
 
 const navItems = [
-  { path: '/dashboard', label: '儀表板' },
-  { path: '/statistics', label: '統計分析' },
+  { path: '/dashboard', label: '系統首頁' },
+  { path: '/statistics', label: '報名詳情' },
+  { path: '/pending', label: '待審核名單' },
   { path: '/events', label: '活動管理' },
-  { path: '/categories', label: '票券類別' },
-  { path: '/pending', label: '待審核名單' }
+  { path: '/categories', label: '票券類別' }
+  
 ];
 
 const handleLogout = async () => {

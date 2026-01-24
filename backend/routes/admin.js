@@ -627,6 +627,56 @@ router.get('/statistics', async (req, res) => {
   }
 });
 
+// 取得同手機號申請數量（已申請 / 審查中），可選 event_id 篩選活動
+router.get('/stats/phone-counts', async (req, res) => {
+  try {
+    const { event_id } = req.query;
+
+    let approvedRows;
+    let pendingRows;
+
+    if (event_id) {
+      const eid = Number(event_id);
+      if (isNaN(eid)) {
+        return res.status(400).json({ error: '無效的 event_id' });
+      }
+      approvedRows = await dbAll(
+        `SELECT phone, COUNT(*) as cnt FROM tickets WHERE event_id = ? GROUP BY phone`,
+        [eid]
+      );
+      pendingRows = await dbAll(
+        `SELECT phone, COUNT(*) as cnt FROM pending_list 
+         WHERE event_id = ? AND status = 'pending' GROUP BY phone`,
+        [eid]
+      );
+    } else {
+      approvedRows = await dbAll(
+        `SELECT phone, COUNT(*) as cnt FROM tickets GROUP BY phone`
+      );
+      pendingRows = await dbAll(
+        `SELECT phone, COUNT(*) as cnt FROM pending_list 
+         WHERE status = 'pending' GROUP BY phone`
+      );
+    }
+
+    const phoneCounts = {};
+    const add = (phone, key, n) => {
+      if (!phoneCounts[phone]) phoneCounts[phone] = { approved: 0, pending: 0 };
+      phoneCounts[phone][key] = n;
+    };
+    approvedRows.forEach((r) => add(r.phone, 'approved', r.cnt || 0));
+    pendingRows.forEach((r) => {
+      if (!phoneCounts[r.phone]) phoneCounts[r.phone] = { approved: 0, pending: 0 };
+      phoneCounts[r.phone].pending = r.cnt || 0;
+    });
+
+    res.json({ success: true, phoneCounts });
+  } catch (error) {
+    console.error('取得同手機申請數錯誤:', error);
+    res.status(500).json({ error: '取得失敗' });
+  }
+});
+
 // 取得所有活動的統計資訊（用於儀表板）
 router.get('/statistics/by-events', async (req, res) => {
   try {

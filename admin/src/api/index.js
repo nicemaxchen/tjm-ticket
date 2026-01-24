@@ -64,5 +64,7 @@ export const adminApi = {
   
   // 統計
   getStatistics: (eventId) => api.get('/admin/statistics', { params: { event_id: eventId } }),
-  getStatisticsByEvents: () => api.get('/admin/statistics/by-events')
+  getStatisticsByEvents: () => api.get('/admin/statistics/by-events'),
+  getPhoneCounts: (eventId) =>
+    api.get('/admin/stats/phone-counts', { params: eventId ? { event_id: eventId } : {} })
 };

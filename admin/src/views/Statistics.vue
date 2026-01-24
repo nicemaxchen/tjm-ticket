@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <div class="header-left">
-            <span>統計分析</span>
+            <span>報名詳情</span>
             <el-select
               v-model="selectedEventId"
               placeholder="選擇活動"
@@ -72,7 +72,15 @@
         </el-table-column>
         <el-table-column prop="category_name" label="票券類別" width="120" header-align="center" />
         <el-table-column prop="phone" label="手機號" width="130" header-align="center" />
-        <el-table-column prop="email" label="Email" width="200" header-align="center">
+        <!-- <el-table-column label="同手機申請數" width="140" header-align="center">
+          <template #default="{ row }">
+            <span v-if="phoneCounts[row.phone]">
+              已申請{{ phoneCounts[row.phone].approved }} / 審查中{{ phoneCounts[row.phone].pending }}
+            </span>
+            <span v-else>—</span>
+          </template>
+        </el-table-column> -->
+        <el-table-column prop="email" label="Email" width="160" header-align="center">
           <template #default="{ row }">
             {{ row.email || '-' }}
           </template>
@@ -81,7 +89,7 @@
           <template #default="{ row }">
             {{ formatDate(row.registration_time || row.created_at) }}
           </template>
-        </el-table-column>
+        </el-table-column>        
         <el-table-column prop="checkin_status" label="報到狀態" width="120" header-align="center">
           <template #default="{ row }">
             <el-tag :type="row.checkin_status === 'checked' ? 'success' : 'info'">
@@ -94,7 +102,7 @@
             {{ row.checkin_time ? formatDate(row.checkin_time) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right" header-align="center">
+        <el-table-column label="操作" fixed="right" header-align="center">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">
               編輯
@@ -116,12 +124,21 @@
         <el-table-column prop="name" label="姓名" width="120" header-align="center" />
         <el-table-column prop="category_name" label="票券類別" width="150" header-align="center" />
         <el-table-column prop="phone" label="手機號" width="130" header-align="center" />
-        <el-table-column prop="email" label="Email" width="200" header-align="center" />
+        <el-table-column label="同手機申請數" width="160" header-align="center">
+          <template #default="{ row }">
+            <span v-if="phoneCounts[row.phone]">
+              已申請{{ phoneCounts[row.phone].approved }} / 審查中{{ phoneCounts[row.phone].pending }}
+            </span>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="email" label="Email" header-align="center" />
         <el-table-column prop="created_at" label="報名時間" width="180" header-align="center">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
+        
         <el-table-column label="操作" width="200" fixed="right" header-align="center">
           <template #default="{ row }">
             <el-button type="success" size="small" @click="handleApprove(row)">
@@ -138,7 +155,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { adminApi } from '../api';
@@ -157,6 +174,18 @@ const statistics = reactive({
 });
 const tickets = ref([]);
 const pendingList = ref([]);
+
+const phoneCounts = computed(() => {
+  const map = {};
+  const add = (phone, key) => {
+    if (!phone) return;
+    if (!map[phone]) map[phone] = { approved: 0, pending: 0 };
+    map[phone][key]++;
+  };
+  tickets.value.forEach((row) => add(row.phone, 'approved'));
+  pendingList.value.forEach((row) => add(row.phone, 'pending'));
+  return map;
+});
 
 onMounted(async () => {
   // 先載入活動列表

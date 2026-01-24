@@ -5,12 +5,13 @@
         <span>查詢報名資料</span>
       </template>
 
-      <el-form :model="form" label-width="120px" v-if="!verified">
+      <el-form :model="form" label-width="120px" v-if="!verified" @submit.prevent>
         <el-form-item label="手機號" required>
           <el-input
             v-model="form.phone"
             placeholder="請輸入手機號"
             style="width: 300px"
+            @keydown.enter.prevent="handleVerify"
           />
         </el-form-item>
 
@@ -20,6 +21,7 @@
             placeholder="請輸入6位驗證碼"
             style="width: 200px"
             maxlength="6"
+            @keydown.enter.prevent="handleVerify"
           />
           <el-button
             :disabled="countdown > 0"
@@ -145,9 +147,9 @@
           </el-card>
         </div>
 
-        <!-- 返回首頁按鈕 -->
+        <!-- 重新查詢按鈕 -->
         <div style="margin-top: 20px; text-align: center;">
-          <el-button type="default" @click="goToHome">返回首頁</el-button>
+          <el-button type="default" @click="reset">重新查詢</el-button>
         </div>
       </div>
     </el-card>

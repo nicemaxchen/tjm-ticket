@@ -6,17 +6,26 @@
       </template>
 
       <el-table :data="pendingList" border style="width: 100%">
-        <el-table-column prop="name" label="姓名" width="120" header-align="center" />
+        <el-table-column prop="event_name" label="活動" width="160" header-align="center" />
+        <el-table-column prop="name" label="姓名" width="100" header-align="center" />
+        <el-table-column prop="category_name" label="票券類別" width="120" header-align="center" />
         <el-table-column prop="phone" label="手機號" width="130" header-align="center" />
-        <el-table-column prop="email" label="Email" width="200" header-align="center" />
-        <el-table-column prop="event_name" label="活動" width="200" header-align="center" />
-        <el-table-column prop="category_name" label="票券類別" width="150" header-align="center" />
+        <el-table-column label="同手機申請數" width="140" header-align="center">
+          <template #default="{ row }">
+            <span v-if="phoneCounts[row.phone]">
+              已申請{{ phoneCounts[row.phone].approved }} / 審查中{{ phoneCounts[row.phone].pending }}
+            </span>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="email" label="Email" header-align="center" />
+        
         <el-table-column prop="created_at" label="申請時間" width="180" header-align="center">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right" header-align="center">
+        <el-table-column label="操作" width="160" fixed="right" header-align="center">
           <template #default="{ row }">
             <el-button
               type="success"
@@ -89,6 +98,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { adminApi } from '../api';
 
 const pendingList = ref([]);
+const phoneCounts = ref({});
 const showApproveDialog = ref(false);
 const showRejectDialog = ref(false);
 const currentId = ref(null);
@@ -107,8 +117,12 @@ onMounted(async () => {
 
 const loadPendingList = async () => {
   try {
-    const result = await adminApi.getPendingList();
-    pendingList.value = result.pendingList.filter(item => item.status === 'pending');
+    const [pendingResult, countsResult] = await Promise.all([
+      adminApi.getPendingList(),
+      adminApi.getPhoneCounts()
+    ]);
+    pendingList.value = pendingResult.pendingList.filter(item => item.status === 'pending');
+    phoneCounts.value = countsResult.phoneCounts || {};
   } catch (error) {
     ElMessage.error('載入待審核名單失敗');
   }

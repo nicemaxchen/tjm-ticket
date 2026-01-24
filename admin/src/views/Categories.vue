@@ -109,7 +109,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right" header-align="center">
+        <el-table-column label="操作" width="160" fixed="right" header-align="center">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">
               編輯

@@ -5,7 +5,7 @@
         <span>活動統計</span>
       </template>
       <el-table :data="eventStats" border style="width: 100%">
-        <el-table-column prop="event_name" label="活動名稱" width="200" header-align="center" />
+        <el-table-column prop="event_name" label="活動名稱" header-align="center" />
         <el-table-column prop="event_date" label="活動日期" width="180" header-align="center">
           <template #default="{ row }">
             {{ formatDate(row.event_date) }}
@@ -18,7 +18,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="總票券數" width="120" align="center" header-align="center">
+        <el-table-column label="總開票數" width="120" align="center" header-align="center">
           <template #default="{ row }">
             <el-tag type="info">{{ row.totalTickets }}張</el-tag>
           </template>
@@ -45,7 +45,7 @@
               size="small"
               @click="$router.push(`/statistics?eventId=${row.event_id}`)"
             >
-              詳情
+              報名詳情
             </el-button>
           </template>
         </el-table-column>
