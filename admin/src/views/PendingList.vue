@@ -38,6 +38,7 @@
       <el-table :data="filteredPendingList" border style="width: 100%">
         <el-table-column prop="event_name" label="活動" width="160" header-align="center" sortable />
         <el-table-column prop="name" label="姓名" width="100" header-align="center" sortable />
+        <el-table-column prop="organization_title" label="單位與職稱" width="180" header-align="center" />
         <el-table-column prop="category_name" label="票券類別" width="120" header-align="center" sortable />
         <el-table-column prop="phone" label="手機號" width="130" header-align="center" sortable />
         <el-table-column label="同手機申請數" width="140" header-align="center">

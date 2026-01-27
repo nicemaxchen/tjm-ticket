@@ -55,6 +55,7 @@ export function initDatabase() {
       name TEXT NOT NULL,
       email TEXT NOT NULL,
       phone TEXT NOT NULL UNIQUE,
+      organization_title TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     
@@ -139,6 +140,7 @@ export function initDatabase() {
       name TEXT NOT NULL,
       email TEXT NOT NULL,
       phone TEXT NOT NULL,
+      organization_title TEXT,
       event_id INTEGER NOT NULL,
       ticket_category_id INTEGER NOT NULL,
       status TEXT DEFAULT 'pending',
@@ -262,6 +264,20 @@ export function initDatabase() {
   db.run(`ALTER TABLE events ADD COLUMN general_per_phone_limit INTEGER DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
       console.error('❌ Add general_per_phone_limit column error:', err);
+    }
+  });
+
+  // 為 users 表添加 organization_title 欄位
+  db.run(`ALTER TABLE users ADD COLUMN organization_title TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add organization_title column to users error:', err);
+    }
+  });
+
+  // 為 pending_list 表添加 organization_title 欄位
+  db.run(`ALTER TABLE pending_list ADD COLUMN organization_title TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('❌ Add organization_title column to pending_list error:', err);
     }
   });
 

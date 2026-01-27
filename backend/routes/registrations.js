@@ -77,6 +77,7 @@ router.post('/register', async (req, res) => {
       name, 
       email, 
       phone,
+      organization_title = null,
       is_from_liff = false,
       liff_user_id = null
     } = req.body;
@@ -141,15 +142,15 @@ router.post('/register', async (req, res) => {
     
     if (!user) {
       const result = await dbRun(
-        'INSERT INTO users (liff_user_id, name, email, phone) VALUES (?, ?, ?, ?)',
-        [liff_user_id, name, email, phone]
+        'INSERT INTO users (liff_user_id, name, email, phone, organization_title) VALUES (?, ?, ?, ?, ?)',
+        [liff_user_id, name, email, phone, organization_title]
       );
       user = await dbGet('SELECT * FROM users WHERE id = ?', [result.lastID]);
     } else {
       // 更新使用者資訊
       await dbRun(
-        'UPDATE users SET name = ?, email = ?, liff_user_id = ? WHERE id = ?',
-        [name, email, liff_user_id || user.liff_user_id, user.id]
+        'UPDATE users SET name = ?, email = ?, liff_user_id = ?, organization_title = ? WHERE id = ?',
+        [name, email, liff_user_id || user.liff_user_id, organization_title, user.id]
       );
       user = await dbGet('SELECT * FROM users WHERE id = ?', [user.id]);
     }
@@ -169,9 +170,9 @@ router.post('/register', async (req, res) => {
       // 加入待審核名單
       await dbRun(
         `INSERT INTO pending_list 
-         (registration_id, name, email, phone, event_id, ticket_category_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-        [registrationId, name, email, phone, event_id, ticket_category_id]
+         (registration_id, name, email, phone, organization_title, event_id, ticket_category_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        [registrationId, name, email, phone, organization_title, event_id, ticket_category_id]
       );
 
       return res.json({
@@ -227,9 +228,9 @@ router.post('/register', async (req, res) => {
       // 加入待審核名單
       await dbRun(
         `INSERT INTO pending_list 
-         (registration_id, name, email, phone, event_id, ticket_category_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-        [registrationId, name, email, phone, event_id, ticket_category_id]
+         (registration_id, name, email, phone, organization_title, event_id, ticket_category_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        [registrationId, name, email, phone, organization_title, event_id, ticket_category_id]
       );
     }
 

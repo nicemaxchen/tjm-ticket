@@ -30,12 +30,12 @@
         </el-table-column>
         <el-table-column label="未報到" width="120" align="center" header-align="center">
           <template #default="{ row }">
-            <el-tag type="warning">{{ row.uncheckedTickets }}張</el-tag>
+            <el-tag type="danger">{{ row.uncheckedTickets }}張</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="待審核" width="120" align="center" header-align="center">
           <template #default="{ row }">
-            <el-tag type="danger">{{ row.pendingCount }}條</el-tag>
+            <el-tag type="warning">{{ row.pendingCount }}條</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="100" header-align="center">
@@ -329,8 +329,8 @@ const getCheckinStatusOptionAll = (event) => {
   const pending = event.pendingCount || 0;
   let data = [
     { value: checked, name: '已報到', itemStyle: { color: '#67c23a' } },
-    { value: unchecked, name: '未報到', itemStyle: { color: '#e6a23c' } },
-    { value: pending, name: '待審核', itemStyle: { color: '#f56c6c' } }
+    { value: unchecked, name: '未報到', itemStyle: { color: '#f56c6c' } },
+    { value: pending, name: '待審核', itemStyle: { color: '#e6a23c' } }
   ];
   if (data.every((item) => item.value === 0)) {
     data = [{ value: 1, name: '無數據', itemStyle: { color: '#e4e7ed' } }];
@@ -420,8 +420,8 @@ const getCheckinStatusOption = (event, identityType) => {
   
   let data = [
     { value: checked, name: '已報到', itemStyle: { color: '#67c23a' } },
-    { value: unchecked, name: '未報到', itemStyle: { color: '#e6a23c' } },
-    { value: pending, name: '待審核', itemStyle: { color: '#f56c6c' } }
+    { value: unchecked, name: '未報到', itemStyle: { color: '#f56c6c' } },
+    { value: pending, name: '待審核', itemStyle: { color: '#e6a23c' } }
   ];
   
   if (data.every((item) => item.value === 0)) {

@@ -561,6 +561,7 @@ router.get('/statistics', async (req, res) => {
         `SELECT t.*, tc.name as category_name, tc.identity_type, e.name as event_name, e.max_attendees,
                 COALESCE(u.name, pl.name) as user_name,
                 COALESCE(u.email, pl.email) as email,
+                COALESCE(u.organization_title, pl.organization_title) as organization_title,
                 COALESCE(r.created_at, pl.created_at) as registration_time
          FROM tickets t
          JOIN ticket_categories tc ON t.ticket_category_id = tc.id
@@ -588,6 +589,7 @@ router.get('/statistics', async (req, res) => {
         `SELECT t.*, tc.name as category_name, tc.identity_type, e.name as event_name, e.max_attendees,
                 COALESCE(u.name, pl.name) as user_name,
                 COALESCE(u.email, pl.email) as email,
+                COALESCE(u.organization_title, pl.organization_title) as organization_title,
                 COALESCE(r.created_at, pl.created_at) as registration_time
          FROM tickets t
          JOIN ticket_categories tc ON t.ticket_category_id = tc.id

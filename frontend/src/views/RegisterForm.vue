@@ -21,9 +21,14 @@
             <el-option
               v-for="event in events"
               :key="event.id"
-              :label="event.name"
+              :label="formatEventLabel(event)"
               :value="event.id"
-            />
+            >
+              <span>{{ event.name }}</span>
+              <span class="event-date" v-if="event.event_date">
+                （{{ formatEventDate(event) }}）
+              </span>
+            </el-option>
           </el-select>
         </el-form-item>
 
@@ -47,6 +52,14 @@
           <el-input
             v-model="form.name"
             placeholder="請輸入姓名"
+            style="width: 300px"
+          />
+        </el-form-item>
+
+        <el-form-item label="單位與職稱">
+          <el-input
+            v-model="form.organization_title"
+            placeholder="選填，例：XX公司／工程師"
             style="width: 300px"
           />
         </el-form-item>
@@ -159,6 +172,7 @@ const form = reactive({
   email: '',
   phone: '',
   code: '',
+  organization_title: '',
   is_from_liff: false,
   liff_user_id: null
 });
@@ -321,11 +335,34 @@ const startCountdown = () => {
     }
   }, 1000);
 };
+
+const formatEventDate = (event) => {
+  if (!event || !event.event_date) return '';
+  const date = new Date(event.event_date);
+  return date.toLocaleString('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const formatEventLabel = (event) => {
+  if (!event) return '';
+  const dateStr = formatEventDate(event);
+  if (!dateStr) return event.name || '';
+  return `${event.name} (${dateStr})`;
+};
 </script>
 
 <style scoped>
 .register-form {
   max-width: 700px;
   margin: 0 auto;
+}
+
+.event-date {
+  color: #409eff;
 }
 </style>
