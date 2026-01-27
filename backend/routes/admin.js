@@ -1,15 +1,33 @@
 import express from 'express';
-import { dbRun, dbGet, dbAll } from '../database/init.js';
 import { v4 as uuidv4 } from 'uuid';
+import { firestore } from '../firebase.js';
+import { getAllEvents, createEvent, updateEvent, getEventById } from '../db/events.js';
+import {
+  getAllCategoriesByEvent,
+  getCategoriesByEvent,
+  createCategory,
+  updateCategory,
+  getCategoryById
+} from '../db/ticketCategories.js';
+import {
+  createTicket,
+  findTicketsByEvent,
+  findAllTickets
+} from '../db/ticketsData.js';
+import {
+  createPending,
+  getPendingById,
+  getPendingList,
+  updatePending
+} from '../db/pendingList.js';
+import { getRegistrationById, updateRegistrationStatus } from '../db/registrations.js';
 
 const router = express.Router();
 
-// 取得所有活動（後台）
+// 取得所有活動（後台） - 改用 Firebase
 router.get('/events', async (req, res) => {
   try {
-    const events = await dbAll(
-      'SELECT * FROM events ORDER BY created_at DESC'
-    );
+    const events = await getAllEvents();
 
     res.json({
       success: true,
@@ -21,7 +39,7 @@ router.get('/events', async (req, res) => {
   }
 });
 
-// 建立活動
+// 建立活動 - 改用 Firebase
 router.post('/events', async (req, res) => {
   try {
     const {
@@ -43,21 +61,20 @@ router.post('/events', async (req, res) => {
       return res.status(400).json({ error: '活動名稱不能為空' });
     }
 
-    const result = await dbRun(
-      `INSERT INTO events 
-       (name, description, event_date, ticket_collection_start, 
-        ticket_collection_end, checkin_start, checkin_end, allow_web_collection,
-        max_attendees, location, vip_per_phone_limit, general_per_phone_limit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        name, description, event_date, ticket_collection_start,
-        ticket_collection_end, checkin_start, checkin_end, 
-        allow_web_collection ? 1 : 0, max_attendees || 0, location || '',
-        vip_per_phone_limit || 0, general_per_phone_limit || 0
-      ]
-    );
-
-    const event = await dbGet('SELECT * FROM events WHERE id = ?', [result.lastID]);
+    const event = await createEvent({
+      name,
+      description,
+      event_date,
+      ticket_collection_start,
+      ticket_collection_end,
+      checkin_start,
+      checkin_end,
+      allow_web_collection: !!allow_web_collection,
+      max_attendees: Number(max_attendees) || 0,
+      location: location || '',
+      vip_per_phone_limit: Number(vip_per_phone_limit) || 0,
+      general_per_phone_limit: Number(general_per_phone_limit) || 0
+    });
 
     res.json({
       success: true,
@@ -70,7 +87,7 @@ router.post('/events', async (req, res) => {
   }
 });
 
-// 更新活動
+// 更新活動 - 改用 Firebase
 router.put('/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -89,7 +106,6 @@ router.put('/events/:id', async (req, res) => {
       general_per_phone_limit
     } = req.body;
 
-    // 確保資料類型正確
     const maxAttendees = max_attendees !== null && max_attendees !== undefined 
       ? Number(max_attendees) 
       : 0;
@@ -103,23 +119,22 @@ router.put('/events/:id', async (req, res) => {
       ? Number(general_per_phone_limit) 
       : 0;
 
-    console.log('更新活動數據:', { id, max_attendees: maxAttendees, location: eventLocation, vip_per_phone_limit: vipLimit, general_per_phone_limit: generalLimit }); // 調試用
+    console.log('更新活動數據:', { id, max_attendees: maxAttendees, location: eventLocation, vip_per_phone_limit: vipLimit, general_per_phone_limit: generalLimit });
 
-    await dbRun(
-      `UPDATE events 
-       SET name = ?, description = ?, event_date = ?, 
-           ticket_collection_start = ?, ticket_collection_end = ?,
-           checkin_start = ?, checkin_end = ?, allow_web_collection = ?,
-           max_attendees = ?, location = ?, vip_per_phone_limit = ?, general_per_phone_limit = ?
-       WHERE id = ?`,
-      [
-        name, description, event_date, ticket_collection_start,
-        ticket_collection_end, checkin_start, checkin_end,
-        allow_web_collection ? 1 : 0, maxAttendees, eventLocation, vipLimit, generalLimit, id
-      ]
-    );
-
-    const event = await dbGet('SELECT * FROM events WHERE id = ?', [id]);
+    const event = await updateEvent(id, {
+      name,
+      description,
+      event_date,
+      ticket_collection_start,
+      ticket_collection_end,
+      checkin_start,
+      checkin_end,
+      allow_web_collection: !!allow_web_collection,
+      max_attendees: maxAttendees,
+      location: eventLocation,
+      vip_per_phone_limit: vipLimit,
+      general_per_phone_limit: generalLimit
+    });
 
     res.json({
       success: true,
@@ -137,21 +152,39 @@ router.get('/categories', async (req, res) => {
   try {
     const { event_id } = req.query;
     
-    let sql = 'SELECT tc.*, e.name as event_name, e.max_attendees FROM ticket_categories tc LEFT JOIN events e ON tc.event_id = e.id';
-    const params = [];
-    
+    // 先載入活動資料，方便附加 event_name / max_attendees
+    const events = await getAllEvents();
+    const eventMap = {};
+    events.forEach((e) => {
+      eventMap[String(e.id)] = e;
+    });
+
+    let categories = [];
     if (event_id) {
-      sql += ' WHERE tc.event_id = ?';
-      params.push(event_id);
+      categories = await getAllCategoriesByEvent(event_id);
+    } else {
+      const snap = await firestore.collection('ticket_categories').get();
+      categories = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      categories.sort((a, b) => {
+        const soA = a.sort_order ?? 0;
+        const soB = b.sort_order ?? 0;
+        if (soA !== soB) return soA - soB;
+        return (a.id || '').localeCompare(b.id || '');
+      });
     }
-    
-    sql += ' ORDER BY tc.sort_order ASC, tc.id ASC';
-    
-    const categories = await dbAll(sql, params);
+
+    const enriched = categories.map((c) => {
+      const ev = eventMap[String(c.event_id)] || null;
+      return {
+        ...c,
+        event_name: ev?.name || '',
+        max_attendees: ev?.max_attendees || 0
+      };
+    });
 
     res.json({
       success: true,
-      categories: categories || []
+      categories: enriched || []
     });
   } catch (error) {
     console.error('取得票券類別錯誤:', error);
@@ -168,12 +201,8 @@ router.put('/categories/update-order', async (req, res) => {
       return res.status(400).json({ error: 'categoryIds 必須是陣列' });
     }
 
-    // 使用事務更新所有類別的排序
     for (let i = 0; i < categoryIds.length; i++) {
-      await dbRun(
-        'UPDATE ticket_categories SET sort_order = ? WHERE id = ?',
-        [i + 1, categoryIds[i]]
-      );
+      await updateCategory(categoryIds[i], { sort_order: i + 1 });
     }
 
     res.json({
@@ -209,19 +238,17 @@ router.post('/categories', async (req, res) => {
     }
 
     // 驗證活動是否存在
-    const event = await dbGet('SELECT * FROM events WHERE id = ?', [event_id]);
+    const event = await getEventById(event_id);
     if (!event) {
       return res.status(400).json({ error: '活動不存在' });
     }
 
     // 驗證總限額不超過活動上限
     if (event.max_attendees > 0 && total_limit > 0) {
-      // 取得該活動所有類別的總限額總和（排除無限制的）
-      const existingCategories = await dbAll(
-        'SELECT total_limit FROM ticket_categories WHERE event_id = ? AND total_limit > 0',
-        [event_id]
-      );
-      const currentSum = existingCategories.reduce((sum, cat) => sum + (cat.total_limit || 0), 0);
+      const existingCategories = await getAllCategoriesByEvent(event_id);
+      const currentSum = existingCategories
+        .filter((c) => (c.total_limit || 0) > 0)
+        .reduce((sum, cat) => sum + (cat.total_limit || 0), 0);
       const newSum = currentSum + total_limit;
       
       if (newSum > event.max_attendees) {
@@ -235,23 +262,26 @@ router.post('/categories', async (req, res) => {
     const validIdentityType = identity_type === 'vip' ? 'vip' : 'general';
 
     // 取得該活動的最大 sort_order，新類別排在最後
-    const maxOrder = await dbGet(
-      'SELECT COALESCE(MAX(sort_order), 0) as max_order FROM ticket_categories WHERE event_id = ?',
-      [event_id]
-    );
-    const newSortOrder = (maxOrder?.max_order || 0) + 1;
+    const existingForEvent = await getAllCategoriesByEvent(event_id);
+    const maxOrder =
+      existingForEvent.reduce(
+        (max, c) => (c.sort_order && c.sort_order > max ? c.sort_order : max),
+        0
+      ) || 0;
+    const newSortOrder = maxOrder + 1;
 
-    const result = await dbRun(
-      `INSERT INTO ticket_categories 
-       (event_id, name, description, total_limit, daily_limit, identity_type, requires_review, allow_collection, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [event_id, name, description, total_limit || 0, daily_limit || 0, validIdentityType, requires_review ? 1 : 0, allow_collection !== undefined ? (allow_collection ? 1 : 0) : 1, newSortOrder]
-    );
-
-    const category = await dbGet(
-      'SELECT tc.*, e.name as event_name FROM ticket_categories tc LEFT JOIN events e ON tc.event_id = e.id WHERE tc.id = ?',
-      [result.lastID]
-    );
+    const category = await createCategory({
+      event_id: String(event_id),
+      name,
+      description,
+      total_limit: total_limit || 0,
+      daily_limit: daily_limit || 0,
+      identity_type: validIdentityType,
+      requires_review: !!requires_review,
+      allow_collection:
+        allow_collection !== undefined ? !!allow_collection : true,
+      sort_order: newSortOrder
+    });
 
     res.json({
       success: true,
@@ -283,7 +313,7 @@ router.put('/categories/:id', async (req, res) => {
     } = req.body;
 
     // 取得當前類別資訊
-    const currentCategory = await dbGet('SELECT * FROM ticket_categories WHERE id = ?', [id]);
+    const currentCategory = await getCategoryById(id);
     if (!currentCategory) {
       return res.status(404).json({ error: '票券類別不存在' });
     }
@@ -292,19 +322,18 @@ router.put('/categories/:id', async (req, res) => {
     const targetEventId = event_id || currentCategory.event_id;
     
     // 驗證活動是否存在
-    const event = await dbGet('SELECT * FROM events WHERE id = ?', [targetEventId]);
+    const event = await getEventById(targetEventId);
     if (!event) {
       return res.status(400).json({ error: '活動不存在' });
     }
 
     // 驗證總限額不超過活動上限
     if (event.max_attendees > 0 && total_limit !== undefined && total_limit > 0) {
-      // 取得該活動所有類別的總限額總和（排除當前類別和無限制的）
-      const existingCategories = await dbAll(
-        'SELECT total_limit FROM ticket_categories WHERE event_id = ? AND id != ? AND total_limit > 0',
-        [targetEventId, id]
-      );
-      const currentSum = existingCategories.reduce((sum, cat) => sum + (cat.total_limit || 0), 0);
+      const existingCategories = await getAllCategoriesByEvent(targetEventId);
+      const currentSum = existingCategories
+        .filter((c) => String(c.id) !== String(id))
+        .filter((c) => (c.total_limit || 0) > 0)
+        .reduce((sum, cat) => sum + (cat.total_limit || 0), 0);
       const newSum = currentSum + total_limit;
       
       if (newSum > event.max_attendees) {
@@ -314,56 +343,35 @@ router.put('/categories/:id', async (req, res) => {
       }
     }
 
-    const updateFields = [];
-    const updateValues = [];
+    const updateData = {};
 
     if (event_id !== undefined) {
-      updateFields.push('event_id = ?');
-      updateValues.push(event_id);
+      updateData.event_id = String(event_id);
     }
     if (name !== undefined) {
-      updateFields.push('name = ?');
-      updateValues.push(name);
+      updateData.name = name;
     }
     if (description !== undefined) {
-      updateFields.push('description = ?');
-      updateValues.push(description);
+      updateData.description = description;
     }
     if (total_limit !== undefined) {
-      updateFields.push('total_limit = ?');
-      updateValues.push(total_limit || 0);
+      updateData.total_limit = total_limit || 0;
     }
     if (daily_limit !== undefined) {
-      updateFields.push('daily_limit = ?');
-      updateValues.push(daily_limit || 0);
+      updateData.daily_limit = daily_limit || 0;
     }
     if (identity_type !== undefined) {
       const validIdentityType = identity_type === 'vip' ? 'vip' : 'general';
-      updateFields.push('identity_type = ?');
-      updateValues.push(validIdentityType);
+      updateData.identity_type = validIdentityType;
     }
     if (requires_review !== undefined) {
-      updateFields.push('requires_review = ?');
-      updateValues.push(requires_review ? 1 : 0);
+      updateData.requires_review = !!requires_review;
     }
     if (allow_collection !== undefined) {
-      updateFields.push('allow_collection = ?');
-      updateValues.push(allow_collection ? 1 : 0);
+      updateData.allow_collection = !!allow_collection;
     }
 
-    updateValues.push(id);
-
-    await dbRun(
-      `UPDATE ticket_categories 
-       SET ${updateFields.join(', ')}
-       WHERE id = ?`,
-      updateValues
-    );
-
-    const category = await dbGet(
-      'SELECT tc.*, e.name as event_name FROM ticket_categories tc LEFT JOIN events e ON tc.event_id = e.id WHERE tc.id = ?',
-      [id]
-    );
+    const category = await updateCategory(id, updateData);
 
     res.json({
       success: true,
@@ -385,28 +393,30 @@ router.delete('/categories/:id', async (req, res) => {
     const { id } = req.params;
 
     // 檢查類別是否存在
-    const category = await dbGet('SELECT * FROM ticket_categories WHERE id = ?', [id]);
+    const category = await getCategoryById(id);
     if (!category) {
       return res.status(404).json({ error: '票券類別不存在' });
     }
 
     // 檢查是否有相關的報名記錄或票券
-    const registrationCheck = await dbGet(
-      'SELECT COUNT(*) as count FROM registrations WHERE ticket_category_id = ?',
-      [id]
-    );
-    const ticketCheck = await dbGet(
-      'SELECT COUNT(*) as count FROM tickets WHERE ticket_category_id = ?',
-      [id]
-    );
+    const regSnap = await firestore
+      .collection('registrations')
+      .where('ticket_category_id', '==', String(id))
+      .limit(1)
+      .get();
+    const ticketSnap = await firestore
+      .collection('tickets')
+      .where('ticket_category_id', '==', String(id))
+      .limit(1)
+      .get();
 
-    if ((registrationCheck && registrationCheck.count > 0) || (ticketCheck && ticketCheck.count > 0)) {
+    if (!regSnap.empty || !ticketSnap.empty) {
       return res.status(400).json({ 
         error: '該類別已有報名記錄或票券，無法刪除' 
       });
     }
 
-    await dbRun('DELETE FROM ticket_categories WHERE id = ?', [id]);
+    await firestore.collection('ticket_categories').doc(String(id)).delete();
 
     res.json({
       success: true,
@@ -422,29 +432,39 @@ router.delete('/categories/:id', async (req, res) => {
 router.get('/pending-list', async (req, res) => {
   try {
     const { event_id } = req.query;
-    
-    let sql = `SELECT pl.*, e.name as event_name, tc.name as category_name
-               FROM pending_list pl
-               JOIN events e ON pl.event_id = e.id
-               JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
-               WHERE pl.status = 'pending'`;
-    const params = [];
-    
-    if (event_id) {
-      const eventIdNum = Number(event_id);
-      if (!isNaN(eventIdNum)) {
-        sql += ' AND pl.event_id = ?';
-        params.push(eventIdNum);
-      }
-    }
-    
-    sql += ' ORDER BY pl.created_at DESC';
-    
-    const pendingList = await dbAll(sql, params);
+
+    const pendingList = await getPendingList({
+      eventId: event_id || undefined,
+      status: 'pending'
+    });
+
+    // 補上 event_name / category_name
+    const events = await getAllEvents();
+    const eventMap = {};
+    events.forEach((e) => {
+      eventMap[String(e.id)] = e;
+    });
+
+    const categoriesSnap = await firestore.collection('ticket_categories').get();
+    const categoryMap = {};
+    categoriesSnap.docs.forEach((d) => {
+      const data = { id: d.id, ...d.data() };
+      categoryMap[String(data.id)] = data;
+    });
+
+    const enriched = pendingList.map((p) => {
+      const ev = eventMap[String(p.event_id)] || null;
+      const cat = categoryMap[String(p.ticket_category_id)] || null;
+      return {
+        ...p,
+        event_name: ev?.name || '',
+        category_name: cat?.name || ''
+      };
+    });
 
     res.json({
       success: true,
-      pendingList: pendingList || []
+      pendingList: enriched || []
     });
   } catch (error) {
     console.error('取得待審核名單錯誤:', error);
@@ -459,7 +479,7 @@ router.post('/pending-list/:id/approve', async (req, res) => {
     const { admin_id, admin_notes } = req.body;
 
     // 取得待審核記錄
-    const pending = await dbGet('SELECT * FROM pending_list WHERE id = ?', [id]);
+    const pending = await getPendingById(id);
 
     if (!pending) {
       return res.status(404).json({ error: '記錄不存在' });
@@ -471,34 +491,35 @@ router.post('/pending-list/:id/approve', async (req, res) => {
 
     // 建立票券
     const tokenId = uuidv4();
-    const barcode = 'TJM' + Date.now().toString() + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const barcode =
+      'TJM' +
+      Date.now().toString() +
+      Math.floor(Math.random() * 1000)
+        .toString()
+        .padStart(3, '0');
 
-    const ticketResult = await dbRun(
-      `INSERT INTO tickets 
-       (token_id, registration_id, user_id, event_id, ticket_category_id, 
-        phone, barcode, collection_method, checkin_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unchecked')`,
-      [
-        tokenId, pending.registration_id, null, pending.event_id,
-        pending.ticket_category_id, pending.phone, barcode, 'admin'
-      ]
-    );
+    const ticket = await createTicket({
+      token_id: tokenId,
+      registration_id: pending.registration_id,
+      user_id: null,
+      event_id: String(pending.event_id),
+      ticket_category_id: String(pending.ticket_category_id),
+      phone: pending.phone,
+      barcode,
+      collection_method: 'admin',
+      checkin_status: 'unchecked'
+    });
 
-    // 更新報名狀態
-    await dbRun(
-      'UPDATE registrations SET status = ? WHERE id = ?',
-      ['confirmed', pending.registration_id]
-    );
-
-    // 更新待審核名單狀態
-    await dbRun(
-      `UPDATE pending_list 
-       SET status = ?, reviewed_by = ?, reviewed_at = ?, admin_notes = ?
-       WHERE id = ?`,
-      ['approved', admin_id, new Date().toISOString(), admin_notes, id]
-    );
-
-    const ticket = await dbGet('SELECT * FROM tickets WHERE id = ?', [ticketResult.lastID]);
+    // 更新報名與待審核狀態
+    await Promise.all([
+      updateRegistrationStatus(pending.registration_id, 'confirmed'),
+      updatePending(id, {
+        status: 'approved',
+        reviewed_by: admin_id || null,
+        reviewed_at: new Date().toISOString(),
+        admin_notes
+      })
+    ]);
 
     res.json({
       success: true,
@@ -517,25 +538,21 @@ router.post('/pending-list/:id/reject', async (req, res) => {
     const { id } = req.params;
     const { admin_id, admin_notes } = req.body;
 
-    const pending = await dbGet('SELECT * FROM pending_list WHERE id = ?', [id]);
+    const pending = await getPendingById(id);
 
     if (!pending) {
       return res.status(404).json({ error: '記錄不存在' });
     }
 
-    // 更新待審核名單狀態
-    await dbRun(
-      `UPDATE pending_list 
-       SET status = ?, reviewed_by = ?, reviewed_at = ?, admin_notes = ?
-       WHERE id = ?`,
-      ['rejected', admin_id, new Date().toISOString(), admin_notes, id]
-    );
-
-    // 更新報名狀態
-    await dbRun(
-      'UPDATE registrations SET status = ? WHERE id = ?',
-      ['rejected', pending.registration_id]
-    );
+    await Promise.all([
+      updatePending(id, {
+        status: 'rejected',
+        reviewed_by: admin_id || null,
+        reviewed_at: new Date().toISOString(),
+        admin_notes
+      }),
+      updateRegistrationStatus(pending.registration_id, 'rejected')
+    ]);
 
     res.json({
       success: true,
@@ -557,54 +574,136 @@ router.get('/statistics', async (req, res) => {
     let pendingCount = 0;
 
     if (event_id) {
-      tickets = await dbAll(
-        `SELECT t.*, tc.name as category_name, tc.identity_type, e.name as event_name, e.max_attendees,
-                COALESCE(u.name, pl.name) as user_name,
-                COALESCE(u.email, pl.email) as email,
-                COALESCE(u.organization_title, pl.organization_title) as organization_title,
-                COALESCE(r.created_at, pl.created_at) as registration_time
-         FROM tickets t
-         JOIN ticket_categories tc ON t.ticket_category_id = tc.id
-         JOIN events e ON t.event_id = e.id
-         LEFT JOIN users u ON t.user_id = u.id
-         LEFT JOIN registrations r ON t.registration_id = r.id
-         LEFT JOIN pending_list pl ON r.id = pl.registration_id
-         WHERE t.event_id = ?
-         ORDER BY t.created_at DESC`,
-        [event_id]
+      const event = await getEventById(event_id);
+      if (!event) {
+        return res.status(404).json({ error: '活動不存在' });
+      }
+
+      const [ticketsRaw, pendingList] = await Promise.all([
+        findTicketsByEvent(event_id),
+        getPendingList({ eventId: event_id, status: 'pending' })
+      ]);
+
+      const categories = await getAllCategoriesByEvent(event_id);
+      const categoryMap = {};
+      categories.forEach((c) => {
+        categoryMap[String(c.id)] = c;
+      });
+
+      // 取得註冊與使用者資料
+      const registrationIds = new Set();
+      ticketsRaw.forEach((t) => {
+        if (t.registration_id) registrationIds.add(String(t.registration_id));
+      });
+
+      const registrationsMap = {};
+      await Promise.all(
+        Array.from(registrationIds).map(async (rid) => {
+          const reg = await getRegistrationById(rid);
+          if (reg) registrationsMap[String(rid)] = reg;
+        })
       );
-      
-      // 取得活動的票數上限
-      const event = await dbGet('SELECT max_attendees FROM events WHERE id = ?', [event_id]);
-      max_attendees = event ? (event.max_attendees || 0) : 0;
-      
-      // 取得該活動的待審核數
-      const pendingCountResult = await dbGet(
-        `SELECT COUNT(*) as count FROM pending_list WHERE event_id = ? AND status = 'pending'`,
-        [event_id]
+
+      const userIds = new Set();
+      Object.values(registrationsMap).forEach((reg) => {
+        if (reg.user_id) userIds.add(String(reg.user_id));
+      });
+      const usersMap = {};
+      await Promise.all(
+        Array.from(userIds).map(async (uid) => {
+          const doc = await firestore.collection('users').doc(String(uid)).get();
+          if (doc.exists) usersMap[String(uid)] = { id: doc.id, ...doc.data() };
+        })
       );
-      pendingCount = pendingCountResult ? (pendingCountResult.count || 0) : 0;
+
+      tickets = ticketsRaw
+        .map((t) => {
+          const reg = t.registration_id ? registrationsMap[String(t.registration_id)] : null;
+          const user = reg && reg.user_id ? usersMap[String(reg.user_id)] : null;
+          const cat = categoryMap[String(t.ticket_category_id)] || null;
+
+          return {
+            ...t,
+            category_name: cat?.name || '',
+            identity_type: cat?.identity_type || 'general',
+            event_name: event.name,
+            max_attendees: event.max_attendees || 0,
+            user_name: user?.name || '',
+            email: user?.email || '',
+            organization_title: user?.organization_title || '',
+            registration_time: reg?.created_at || t.created_at
+          };
+        })
+        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
+      max_attendees = event.max_attendees || 0;
+      pendingCount = pendingList.length;
     } else {
-      tickets = await dbAll(
-        `SELECT t.*, tc.name as category_name, tc.identity_type, e.name as event_name, e.max_attendees,
-                COALESCE(u.name, pl.name) as user_name,
-                COALESCE(u.email, pl.email) as email,
-                COALESCE(u.organization_title, pl.organization_title) as organization_title,
-                COALESCE(r.created_at, pl.created_at) as registration_time
-         FROM tickets t
-         JOIN ticket_categories tc ON t.ticket_category_id = tc.id
-         JOIN events e ON t.event_id = e.id
-         LEFT JOIN users u ON t.user_id = u.id
-         LEFT JOIN registrations r ON t.registration_id = r.id
-         LEFT JOIN pending_list pl ON r.id = pl.registration_id
-         ORDER BY t.created_at DESC`
+      const [ticketsRaw, allPending] = await Promise.all([
+        findAllTickets(),
+        getPendingList({ status: 'pending' })
+      ]);
+
+      const events = await getAllEvents();
+      const eventMap = {};
+      events.forEach((e) => {
+        eventMap[String(e.id)] = e;
+      });
+
+      const categoriesSnap = await firestore.collection('ticket_categories').get();
+      const categoryMap = {};
+      categoriesSnap.docs.forEach((d) => {
+        const data = { id: d.id, ...d.data() };
+        categoryMap[String(data.id)] = data;
+      });
+
+      const registrationIds = new Set();
+      ticketsRaw.forEach((t) => {
+        if (t.registration_id) registrationIds.add(String(t.registration_id));
+      });
+
+      const registrationsMap = {};
+      await Promise.all(
+        Array.from(registrationIds).map(async (rid) => {
+          const reg = await getRegistrationById(rid);
+          if (reg) registrationsMap[String(rid)] = reg;
+        })
       );
-      
-      // 取得所有待審核數
-      const pendingCountResult = await dbGet(
-        `SELECT COUNT(*) as count FROM pending_list WHERE status = 'pending'`
+
+      const userIds = new Set();
+      Object.values(registrationsMap).forEach((reg) => {
+        if (reg.user_id) userIds.add(String(reg.user_id));
+      });
+      const usersMap = {};
+      await Promise.all(
+        Array.from(userIds).map(async (uid) => {
+          const doc = await firestore.collection('users').doc(String(uid)).get();
+          if (doc.exists) usersMap[String(uid)] = { id: doc.id, ...doc.data() };
+        })
       );
-      pendingCount = pendingCountResult ? (pendingCountResult.count || 0) : 0;
+
+      tickets = ticketsRaw
+        .map((t) => {
+          const ev = t.event_id ? eventMap[String(t.event_id)] : null;
+          const reg = t.registration_id ? registrationsMap[String(t.registration_id)] : null;
+          const user = reg && reg.user_id ? usersMap[String(reg.user_id)] : null;
+          const cat = categoryMap[String(t.ticket_category_id)] || null;
+
+          return {
+            ...t,
+            category_name: cat?.name || '',
+            identity_type: cat?.identity_type || 'general',
+            event_name: ev?.name || '',
+            max_attendees: ev?.max_attendees || 0,
+            user_name: user?.name || '',
+            email: user?.email || '',
+            organization_title: user?.organization_title || '',
+            registration_time: reg?.created_at || t.created_at
+          };
+        })
+        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
+      pendingCount = allPending.length;
     }
 
     // 統計資訊
@@ -634,42 +733,28 @@ router.get('/stats/phone-counts', async (req, res) => {
   try {
     const { event_id } = req.query;
 
-    let approvedRows;
-    let pendingRows;
+    let tickets;
+    let pending;
 
     if (event_id) {
-      const eid = Number(event_id);
-      if (isNaN(eid)) {
-        return res.status(400).json({ error: '無效的 event_id' });
-      }
-      approvedRows = await dbAll(
-        `SELECT phone, COUNT(*) as cnt FROM tickets WHERE event_id = ? GROUP BY phone`,
-        [eid]
-      );
-      pendingRows = await dbAll(
-        `SELECT phone, COUNT(*) as cnt FROM pending_list 
-         WHERE event_id = ? AND status = 'pending' GROUP BY phone`,
-        [eid]
-      );
+      tickets = await findTicketsByEvent(event_id);
+      pending = await getPendingList({ eventId: event_id, status: 'pending' });
     } else {
-      approvedRows = await dbAll(
-        `SELECT phone, COUNT(*) as cnt FROM tickets GROUP BY phone`
-      );
-      pendingRows = await dbAll(
-        `SELECT phone, COUNT(*) as cnt FROM pending_list 
-         WHERE status = 'pending' GROUP BY phone`
-      );
+      tickets = await findAllTickets();
+      pending = await getPendingList({ status: 'pending' });
     }
 
     const phoneCounts = {};
-    const add = (phone, key, n) => {
-      if (!phoneCounts[phone]) phoneCounts[phone] = { approved: 0, pending: 0 };
-      phoneCounts[phone][key] = n;
-    };
-    approvedRows.forEach((r) => add(r.phone, 'approved', r.cnt || 0));
-    pendingRows.forEach((r) => {
-      if (!phoneCounts[r.phone]) phoneCounts[r.phone] = { approved: 0, pending: 0 };
-      phoneCounts[r.phone].pending = r.cnt || 0;
+    tickets.forEach((t) => {
+      if (!t.phone) return;
+      if (!phoneCounts[t.phone]) phoneCounts[t.phone] = { approved: 0, pending: 0 };
+      phoneCounts[t.phone].approved += 1;
+    });
+
+    pending.forEach((p) => {
+      if (!p.phone) return;
+      if (!phoneCounts[p.phone]) phoneCounts[p.phone] = { approved: 0, pending: 0 };
+      phoneCounts[p.phone].pending += 1;
     });
 
     res.json({ success: true, phoneCounts });
@@ -682,42 +767,44 @@ router.get('/stats/phone-counts', async (req, res) => {
 // 取得所有活動的統計資訊（用於儀表板）
 router.get('/statistics/by-events', async (req, res) => {
   try {
-    const events = await dbAll('SELECT * FROM events ORDER BY event_date DESC');
+    const events = await getAllEvents();
     
     const eventStats = await Promise.all(events.map(async (event) => {
-      // 查詢票券，包含身份類別
-      const tickets = await dbAll(
-        `SELECT t.*, tc.identity_type 
-         FROM tickets t
-         JOIN ticket_categories tc ON t.ticket_category_id = tc.id
-         WHERE t.event_id = ?`,
-        [event.id]
-      );
-      
-      // 查詢待審核，包含身份類別
-      const pendingList = await dbAll(
-        `SELECT pl.*, tc.identity_type 
-         FROM pending_list pl
-         JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
-         WHERE pl.event_id = ? AND pl.status = 'pending'`,
-        [event.id]
-      );
+      const tickets = await findTicketsByEvent(event.id);
+      const pendingList = await getPendingList({ eventId: event.id, status: 'pending' });
+
+      const categories = await getAllCategoriesByEvent(event.id);
+      const categoryMap = {};
+      categories.forEach((c) => {
+        categoryMap[String(c.id)] = c;
+      });
       
       const total = tickets.length;
       const checked = tickets.filter(t => t.checkin_status === 'checked').length;
       const unchecked = total - checked;
       const pendingCount = pendingList.length;
 
-      // 按身份分類統計
-      const vipTickets = tickets.filter(t => t.identity_type === 'vip');
-      const generalTickets = tickets.filter(t => t.identity_type === 'general');
+      const vipTickets = tickets.filter((t) => {
+        const cat = categoryMap[String(t.ticket_category_id)];
+        return (cat?.identity_type || 'general') === 'vip';
+      });
+      const generalTickets = tickets.filter((t) => {
+        const cat = categoryMap[String(t.ticket_category_id)];
+        return (cat?.identity_type || 'general') === 'general';
+      });
       const vipChecked = vipTickets.filter(t => t.checkin_status === 'checked').length;
       const vipUnchecked = vipTickets.length - vipChecked;
       const generalChecked = generalTickets.filter(t => t.checkin_status === 'checked').length;
       const generalUnchecked = generalTickets.length - generalChecked;
       
-      const vipPending = pendingList.filter(p => p.identity_type === 'vip').length;
-      const generalPending = pendingList.filter(p => p.identity_type === 'general').length;
+      const vipPending = pendingList.filter((p) => {
+        const cat = categoryMap[String(p.ticket_category_id)];
+        return (cat?.identity_type || 'general') === 'vip';
+      }).length;
+      const generalPending = pendingList.filter((p) => {
+        const cat = categoryMap[String(p.ticket_category_id)];
+        return (cat?.identity_type || 'general') === 'general';
+      }).length;
 
       return {
         event_id: event.id,

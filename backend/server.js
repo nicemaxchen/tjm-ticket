@@ -7,7 +7,6 @@ import ticketRoutes from './routes/tickets.js';
 import registrationRoutes from './routes/registrations.js';
 import adminRoutes from './routes/admin.js';
 import authRoutes from './routes/auth.js';
-import { initDatabase } from './database/init.js';
 
 dotenv.config();
 
@@ -21,18 +20,6 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// 初始化資料庫
-initDatabase();
-
-// 初始化範例資料（僅在開發環境）
-if (process.env.NODE_ENV !== 'production') {
-  import('./database/seed.js').then(({ seedDatabase }) => {
-    setTimeout(() => {
-      seedDatabase();
-    }, 1000); // 延遲1秒執行，確保表已建立
-  });
-}
 
 // 路由
 app.use('/api/tickets', ticketRoutes);

@@ -1,6 +1,24 @@
 import express from 'express';
-import { dbRun, dbGet, dbAll } from '../database/init.js';
 import { v4 as uuidv4 } from 'uuid';
+import { getEventById } from '../db/events.js';
+import { getCategoryById, getAllCategoriesByEvent } from '../db/ticketCategories.js';
+import { findUserByPhone, createUser, updateUser } from '../db/users.js';
+import { createRegistration, updateRegistrationStatus, getRegistrationById } from '../db/registrations.js';
+import {
+  createTicket,
+  updateTicket,
+  findTicketsByPhone,
+  findTicketsByEvent,
+  findTicketByTokenOrBarcode
+} from '../db/ticketsData.js';
+import {
+  createPending,
+  getPendingById,
+  getPendingList,
+  getPendingByPhoneAndStatus,
+  updatePending
+} from '../db/pendingList.js';
+import { firestore } from '../firebase.js';
 
 const router = express.Router();
 
@@ -13,54 +31,91 @@ router.post('/query', async (req, res) => {
       return res.status(400).json({ error: '手機號不能為空' });
     }
 
-    // 查詢該手機號下的所有已報名票券
-    const tickets = await dbAll(
-      `SELECT t.*, e.name as event_name, e.event_date, e.location as event_location,
-              tc.name as category_name,
-              u.name as user_name, u.email
-       FROM tickets t
-       JOIN events e ON t.event_id = e.id
-       JOIN ticket_categories tc ON t.ticket_category_id = tc.id
-       LEFT JOIN users u ON t.user_id = u.id
-       WHERE t.phone = ?
-       ORDER BY t.created_at DESC`,
-      [phone]
+    // 已開票票券
+    const ticketsRaw = await findTicketsByPhone(phone);
+
+    // 待審查與被拒絕
+    const [pendingList, rejectedList] = await Promise.all([
+      getPendingByPhoneAndStatus(phone, 'pending'),
+      getPendingByPhoneAndStatus(phone, 'rejected')
+    ]);
+
+    // 收集需要的 event/category id
+    const eventIds = new Set();
+    const categoryIds = new Set();
+
+    ticketsRaw.forEach((t) => {
+      if (t.event_id) eventIds.add(String(t.event_id));
+      if (t.ticket_category_id) categoryIds.add(String(t.ticket_category_id));
+    });
+    pendingList.forEach((p) => {
+      if (p.event_id) eventIds.add(String(p.event_id));
+      if (p.ticket_category_id) categoryIds.add(String(p.ticket_category_id));
+    });
+    rejectedList.forEach((p) => {
+      if (p.event_id) eventIds.add(String(p.event_id));
+      if (p.ticket_category_id) categoryIds.add(String(p.ticket_category_id));
+    });
+
+    const eventIdArr = Array.from(eventIds);
+    const categoryIdArr = Array.from(categoryIds);
+
+    const eventsMap = {};
+    const categoriesMap = {};
+
+    // 載入所有相關活動
+    await Promise.all(
+      eventIdArr.map(async (id) => {
+        const ev = await getEventById(id);
+        if (ev) eventsMap[String(id)] = ev;
+      })
     );
 
-    // 查詢該手機號下的待審查記錄
-    const pendingRegistrations = await dbAll(
-      `SELECT pl.*, e.name as event_name, e.location as event_location,
-              tc.name as category_name,
-              r.status as registration_status
-       FROM pending_list pl
-       JOIN events e ON pl.event_id = e.id
-       JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
-       JOIN registrations r ON pl.registration_id = r.id
-       WHERE pl.phone = ? AND pl.status = 'pending'
-       ORDER BY pl.created_at DESC`,
-      [phone]
+    // 載入所有相關類別
+    await Promise.all(
+      categoryIdArr.map(async (id) => {
+        const cat = await getCategoryById(id);
+        if (cat) categoriesMap[String(id)] = cat;
+      })
     );
 
-    // 查詢該手機號下的被拒絕記錄
-    const rejectedRegistrations = await dbAll(
-      `SELECT pl.*, e.name as event_name, e.location as event_location,
-              tc.name as category_name,
-              r.status as registration_status,
-              pl.admin_notes as rejection_reason
-       FROM pending_list pl
-       JOIN events e ON pl.event_id = e.id
-       JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
-       JOIN registrations r ON pl.registration_id = r.id
-       WHERE pl.phone = ? AND pl.status = 'rejected'
-       ORDER BY pl.reviewed_at DESC, pl.created_at DESC`,
-      [phone]
-    );
+    const enrichTicket = (t) => {
+      const ev = t.event_id ? eventsMap[String(t.event_id)] : null;
+      const cat = t.ticket_category_id ? categoriesMap[String(t.ticket_category_id)] : null;
+      return {
+        ...t,
+        event_name: ev?.name || '',
+        event_date: ev?.event_date || null,
+        event_location: ev?.location || '',
+        category_name: cat?.name || ''
+      };
+    };
+
+    const tickets = ticketsRaw.map(enrichTicket);
+
+    const enrichPending = (p) => {
+      const ev = p.event_id ? eventsMap[String(p.event_id)] : null;
+      const cat = p.ticket_category_id ? categoriesMap[String(p.ticket_category_id)] : null;
+      return {
+        ...p,
+        event_name: ev?.name || '',
+        event_location: ev?.location || '',
+        category_name: cat?.name || '',
+        registration_status: p.status
+      };
+    };
+
+    const pendingRegistrations = pendingList.map(enrichPending);
+    const rejectedRegistrations = rejectedList.map((p) => ({
+      ...enrichPending(p),
+      rejection_reason: p.admin_notes || ''
+    }));
 
     res.json({
       success: true,
-      tickets: tickets || [],
-      pendingRegistrations: pendingRegistrations || [],
-      rejectedRegistrations: rejectedRegistrations || []
+      tickets,
+      pendingRegistrations,
+      rejectedRegistrations
     });
   } catch (error) {
     console.error('查詢報名資料錯誤:', error);
@@ -82,7 +137,6 @@ router.post('/register', async (req, res) => {
       liff_user_id = null
     } = req.body;
 
-    // 驗證必填欄位
     if (!event_id || !ticket_category_id || !name || !email || !phone) {
       return res.status(400).json({ 
         error: '必填欄位不完整',
@@ -90,90 +144,95 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // 檢查活動是否存在
-    const event = await dbGet('SELECT * FROM events WHERE id = ?', [event_id]);
+    const event = await getEventById(event_id);
     if (!event) {
       return res.status(404).json({ error: '活動不存在' });
     }
 
-    // 檢查票券類別是否存在
-    const category = await dbGet(
-      'SELECT * FROM ticket_categories WHERE id = ?', 
-      [ticket_category_id]
-    );
+    const category = await getCategoryById(ticket_category_id);
     if (!category) {
       return res.status(404).json({ error: '票券類別不存在' });
     }
 
-    // 檢查同一手機號是否超過限額（根據身份類別檢查該活動的限額）
     const identityType = category.identity_type || 'general';
     const limitField = identityType === 'vip' ? 'vip_per_phone_limit' : 'general_per_phone_limit';
     const eventLimit = event[limitField] || 0;
 
     if (eventLimit > 0) {
-      // 查詢該手機號在該活動中，所有屬於該身份類別的已獲取票券數量
-      const phoneTicketCount = await dbGet(
-        `SELECT COUNT(*) as count FROM tickets t
-         JOIN ticket_categories tc ON t.ticket_category_id = tc.id
-         WHERE t.phone = ? AND t.event_id = ? AND tc.identity_type = ?`,
-        [phone, event_id, identityType]
-      );
+      // 取得該活動所有票券與待審核，計算該手機在此身份類別的數量
+      const [allTicketsForEvent, pendingForEvent] = await Promise.all([
+        findTicketsByEvent(event_id),
+        getPendingList({ eventId: event_id, status: 'pending' })
+      ]);
 
-      // 查詢該手機號在該活動中，所有屬於該身份類別的待審查記錄數量
-      const pendingCount = await dbGet(
-        `SELECT COUNT(*) as count FROM pending_list pl
-         JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
-         WHERE pl.phone = ? AND pl.event_id = ? AND pl.status = 'pending' AND tc.identity_type = ?`,
-        [phone, event_id, identityType]
-      );
+      const categories = await getAllCategoriesByEvent(event_id);
+      const categoryIdentityMap = {};
+      categories.forEach((cat) => {
+        categoryIdentityMap[String(cat.id)] = cat.identity_type || 'general';
+      });
 
-      const totalCount = (phoneTicketCount?.count || 0) + (pendingCount?.count || 0);
+      const phoneTicketCount = allTicketsForEvent.filter((t) => {
+        if (t.phone !== phone) return false;
+        const idType = categoryIdentityMap[String(t.ticket_category_id)] || 'general';
+        return idType === identityType;
+      }).length;
+
+      const pendingCount = pendingForEvent.filter((p) => {
+        if (p.phone !== phone) return false;
+        const idType = categoryIdentityMap[String(p.ticket_category_id)] || 'general';
+        return idType === identityType;
+      }).length;
+
+      const totalCount = phoneTicketCount + pendingCount;
 
       if (totalCount >= eventLimit) {
-        const identityTypeName = identityType === 'vip' ? '貴賓' : '一般';
         return res.status(400).json({ 
           error: `該手機號已超過限額（每手機號限${eventLimit}張）` 
         });
       }
     }
 
-    // 建立或取得使用者
-    let user = await dbGet('SELECT * FROM users WHERE phone = ?', [phone]);
-    
+    // 使用者
+    let user = await findUserByPhone(phone);
     if (!user) {
-      const result = await dbRun(
-        'INSERT INTO users (liff_user_id, name, email, phone, organization_title) VALUES (?, ?, ?, ?, ?)',
-        [liff_user_id, name, email, phone, organization_title]
-      );
-      user = await dbGet('SELECT * FROM users WHERE id = ?', [result.lastID]);
+      user = await createUser({
+        liff_user_id,
+        name,
+        email,
+        phone,
+        organization_title
+      });
     } else {
-      // 更新使用者資訊
-      await dbRun(
-        'UPDATE users SET name = ?, email = ?, liff_user_id = ?, organization_title = ? WHERE id = ?',
-        [name, email, liff_user_id || user.liff_user_id, organization_title, user.id]
-      );
-      user = await dbGet('SELECT * FROM users WHERE id = ?', [user.id]);
+      user = await updateUser(user.id, {
+        name,
+        email,
+        liff_user_id: liff_user_id || user.liff_user_id,
+        organization_title
+      });
     }
 
-    // 建立報名記錄
-    const regResult = await dbRun(
-      `INSERT INTO registrations 
-       (user_id, event_id, ticket_category_id, phone, is_from_liff, status)
-       VALUES (?, ?, ?, ?, ?, 'pending')`,
-      [user.id, event_id, ticket_category_id, phone, is_from_liff ? 1 : 0]
-    );
+    // 報名記錄
+    const registration = await createRegistration({
+      user_id: user.id,
+      event_id: String(event_id),
+      ticket_category_id: String(ticket_category_id),
+      phone,
+      is_from_liff: is_from_liff ? 1 : 0,
+      status: 'pending'
+    });
 
-    const registrationId = regResult.lastID;
-
-    // 如果類別設置為需要審查，直接進入待審查名單
+    // 需要審核：直接進入待審核名單
     if (category.requires_review) {
-      // 加入待審核名單
-      await dbRun(
-        `INSERT INTO pending_list 
-         (registration_id, name, email, phone, organization_title, event_id, ticket_category_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-        [registrationId, name, email, phone, organization_title, event_id, ticket_category_id]
-      );
+      await createPending({
+        registration_id: registration.id,
+        name,
+        email,
+        phone,
+        organization_title,
+        event_id: String(event_id),
+        ticket_category_id: String(ticket_category_id),
+        status: 'pending'
+      });
 
       return res.json({
         success: false,
@@ -182,79 +241,73 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // 檢查是否可以直接取票
-    const canCollect = await checkTicketCollection(
-      event_id, 
-      ticket_category_id, 
-      phone,
-      event
-    );
+    const canCollect = await checkTicketCollectionFirebase({
+      event,
+      category,
+      eventId: event_id,
+      categoryId: ticket_category_id,
+      phone
+    });
 
     let ticket = null;
     let collectionLink = null;
 
     if (canCollect.success) {
-      // 建立票券
       const tokenId = uuidv4();
       const barcode = generateBarcode();
-      
-      const ticketResult = await dbRun(
-        `INSERT INTO tickets 
-         (token_id, registration_id, user_id, event_id, ticket_category_id, 
-          phone, barcode, collection_method, checkin_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unchecked')`,
-        [tokenId, registrationId, user.id, event_id, ticket_category_id, 
-         phone, barcode, 'web']
-      );
 
-      ticket = await dbGet(
-        'SELECT * FROM tickets WHERE id = ?',
-        [ticketResult.lastID]
-      );
+      ticket = await createTicket({
+        token_id: tokenId,
+        registration_id: registration.id,
+        user_id: user.id,
+        event_id: String(event_id),
+        ticket_category_id: String(ticket_category_id),
+        phone,
+        barcode,
+        collection_method: 'web',
+        checkin_status: 'unchecked'
+      });
 
-      // 更新報名狀態
-      await dbRun(
-        'UPDATE registrations SET status = ? WHERE id = ?',
-        ['confirmed', registrationId]
-      );
+      await updateRegistrationStatus(registration.id, 'confirmed');
 
-      // 產生報到連結
       collectionLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkin/${tokenId}`;
 
-      // 發送郵件和簡訊（模擬）
       console.log(`📧 發送報到連結到 ${email}: ${collectionLink}`);
       console.log(`📱 發送報到連結到 ${phone}: ${collectionLink}`);
     } else {
-      // 加入待審核名單
-      await dbRun(
-        `INSERT INTO pending_list 
-         (registration_id, name, email, phone, organization_title, event_id, ticket_category_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-        [registrationId, name, email, phone, organization_title, event_id, ticket_category_id]
-      );
+      await createPending({
+        registration_id: registration.id,
+        name,
+        email,
+        phone,
+        organization_title,
+        event_id: String(event_id),
+        ticket_category_id: String(ticket_category_id),
+        status: 'pending'
+      });
     }
 
     res.json({
       success: canCollect.success,
       message: canCollect.success ? '報名成功，票券已產生' : canCollect.reason,
-      ticket: ticket ? {
-        ...ticket,
-        checkin_link: collectionLink
-      } : null,
+      ticket: ticket
+        ? {
+            ...ticket,
+            checkin_link: collectionLink
+          }
+        : null,
       requires_review: !canCollect.success
     });
-
   } catch (error) {
     console.error('登記報名資料錯誤:', error);
     res.status(500).json({ error: '登記失敗' });
   }
 });
 
-// 檢查是否可以取票
-async function checkTicketCollection(eventId, categoryId, phone, event) {
-  // 檢查開放取票時間
+// Firestore 版檢查是否可以取票
+async function checkTicketCollectionFirebase({ event, category, eventId, categoryId, phone }) {
   const now = new Date();
-  
+
   if (event.ticket_collection_start && new Date(event.ticket_collection_start) > now) {
     return { success: false, reason: '取票尚未開放' };
   }
@@ -263,56 +316,52 @@ async function checkTicketCollection(eventId, categoryId, phone, event) {
     return { success: false, reason: '取票時間已結束' };
   }
 
-  // 檢查是否允許Web取票
   if (!event.allow_web_collection) {
     return { success: false, reason: '該活動不開放Web直接取票' };
   }
 
-  // 檢查票券類別餘票
-  const category = await dbGet(
-    'SELECT * FROM ticket_categories WHERE id = ?',
-    [categoryId]
-  );
+  // 類別餘票
+  const allTicketsForEvent = await findTicketsByEvent(eventId);
+  const issuedCount = allTicketsForEvent.filter(
+    (t) => String(t.ticket_category_id) === String(categoryId)
+  ).length;
 
-  const issuedCount = await dbGet(
-    `SELECT COUNT(*) as count FROM tickets 
-     WHERE ticket_category_id = ? AND event_id = ?`,
-    [categoryId, eventId]
-  );
-
-  if (category.total_limit > 0 && issuedCount.count >= category.total_limit) {
+  if (category.total_limit > 0 && issuedCount >= category.total_limit) {
     return { success: false, reason: '該類票券已售罄' };
   }
 
-  // 檢查同一手機號是否超過限額（根據身份類別檢查該活動的限額）
   const identityType = category.identity_type || 'general';
   const limitField = identityType === 'vip' ? 'vip_per_phone_limit' : 'general_per_phone_limit';
   const eventLimit = event[limitField] || 0;
 
   if (eventLimit > 0) {
-    // 查詢該手機號在該活動中，所有屬於該身份類別的已獲取票券數量
-    const phoneTicketCount = await dbGet(
-      `SELECT COUNT(*) as count FROM tickets t
-       JOIN ticket_categories tc ON t.ticket_category_id = tc.id
-       WHERE t.phone = ? AND t.event_id = ? AND tc.identity_type = ?`,
-      [phone, eventId, identityType]
-    );
+    const pendingForEvent = await getPendingList({ eventId, status: 'pending' });
 
-    // 查詢該手機號在該活動中，所有屬於該身份類別的待審查記錄數量
-    const pendingCount = await dbGet(
-      `SELECT COUNT(*) as count FROM pending_list pl
-       JOIN ticket_categories tc ON pl.ticket_category_id = tc.id
-       WHERE pl.phone = ? AND pl.event_id = ? AND pl.status = 'pending' AND tc.identity_type = ?`,
-      [phone, eventId, identityType]
-    );
+    const categories = await getAllCategoriesByEvent(eventId);
+    const categoryIdentityMap = {};
+    categories.forEach((cat) => {
+      categoryIdentityMap[String(cat.id)] = cat.identity_type || 'general';
+    });
 
-    const totalCount = (phoneTicketCount?.count || 0) + (pendingCount?.count || 0);
+    const phoneTicketCount = allTicketsForEvent.filter((t) => {
+      if (t.phone !== phone) return false;
+      const idType = categoryIdentityMap[String(t.ticket_category_id)] || 'general';
+      return idType === identityType;
+    }).length;
+
+    const pendingCount = pendingForEvent.filter((p) => {
+      if (p.phone !== phone) return false;
+      const idType = categoryIdentityMap[String(p.ticket_category_id)] || 'general';
+      return idType === identityType;
+    }).length;
+
+    const totalCount = phoneTicketCount + pendingCount;
 
     if (totalCount >= eventLimit) {
       const identityTypeName = identityType === 'vip' ? '貴賓' : '一般';
-      return { 
-        success: false, 
-        reason: `該手機號已超過${identityTypeName}身份限額（每手機號限${eventLimit}張）` 
+      return {
+        success: false,
+        reason: `該手機號已超過${identityTypeName}身份限額（每手機號限${eventLimit}張）`
       };
     }
   }
@@ -322,7 +371,13 @@ async function checkTicketCollection(eventId, categoryId, phone, event) {
 
 // 產生條碼
 function generateBarcode() {
-  return 'TJM' + Date.now().toString() + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return (
+    'TJM' +
+    Date.now().toString() +
+    Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, '0')
+  );
 }
 
 // 取得票券詳情（根據token_id）
@@ -330,26 +385,40 @@ router.get('/ticket/:tokenId', async (req, res) => {
   try {
     const { tokenId } = req.params;
 
-    const ticket = await dbGet(
-      `SELECT t.*, e.name as event_name, e.event_date, e.checkin_start, e.checkin_end,
-              e.location as event_location, e.max_attendees,
-              tc.name as category_name,
-              u.name as user_name, u.email, u.phone
-       FROM tickets t
-       JOIN events e ON t.event_id = e.id
-       JOIN ticket_categories tc ON t.ticket_category_id = tc.id
-       LEFT JOIN users u ON t.user_id = u.id
-       WHERE t.token_id = ?`,
-      [tokenId]
-    );
+    const ticket = await findTicketByTokenOrBarcode({ tokenId, barcode: null });
 
     if (!ticket) {
       return res.status(404).json({ error: '票券不存在' });
     }
 
+    const [event, category] = await Promise.all([
+      ticket.event_id ? getEventById(ticket.event_id) : null,
+      ticket.ticket_category_id ? getCategoryById(ticket.ticket_category_id) : null
+    ]);
+
+    let user = null;
+    if (ticket.user_id) {
+      const doc = await firestore.collection('users').doc(String(ticket.user_id)).get();
+      if (doc.exists) user = { id: doc.id, ...doc.data() };
+    }
+
+    const enriched = {
+      ...ticket,
+      event_name: event?.name || '',
+      event_date: event?.event_date || null,
+      checkin_start: event?.checkin_start || null,
+      checkin_end: event?.checkin_end || null,
+      event_location: event?.location || '',
+      max_attendees: event?.max_attendees || 0,
+      category_name: category?.name || '',
+      user_name: user?.name || '',
+      email: user?.email || '',
+      phone: user?.phone || ticket.phone
+    };
+
     res.json({
       success: true,
-      ticket
+      ticket: enriched
     });
   } catch (error) {
     console.error('取得票券詳情錯誤:', error);
@@ -366,20 +435,21 @@ router.post('/checkin', async (req, res) => {
       return res.status(400).json({ error: 'token_id或barcode不能為空' });
     }
 
-    // 查詢票券
-    const ticket = await dbGet(
-      `SELECT t.*, e.name as event_name, e.checkin_start, e.checkin_end
-       FROM tickets t
-       JOIN events e ON t.event_id = e.id
-       WHERE t.token_id = ? OR t.barcode = ?`,
-      [token_id || '', barcode || '']
-    );
+    const ticket = await findTicketByTokenOrBarcode({
+      tokenId: token_id || '',
+      barcode: barcode || ''
+    });
 
     if (!ticket) {
       return res.status(404).json({ error: '票券不存在' });
     }
 
-    // 檢查是否已報到
+    const event = ticket.event_id ? await getEventById(ticket.event_id) : null;
+
+    if (!event) {
+      return res.status(400).json({ error: '對應活動不存在' });
+    }
+
     if (ticket.checkin_status === 'checked') {
       return res.json({
         success: false,
@@ -388,31 +458,24 @@ router.post('/checkin', async (req, res) => {
       });
     }
 
-    // 檢查報到時間
     const now = new Date();
-    if (ticket.checkin_start && new Date(ticket.checkin_start) > now) {
+    if (event.checkin_start && new Date(event.checkin_start) > now) {
       return res.status(400).json({ error: '報到尚未開放' });
     }
 
-    if (ticket.checkin_end && new Date(ticket.checkin_end) < now) {
+    if (event.checkin_end && new Date(event.checkin_end) < now) {
       return res.status(400).json({ error: '報到時間已結束' });
     }
 
-    // 更新報到狀態
-    await dbRun(
-      'UPDATE tickets SET checkin_status = ?, checkin_time = ? WHERE id = ?',
-      ['checked', now.toISOString(), ticket.id]
-    );
-
-    const updatedTicket = await dbGet(
-      'SELECT * FROM tickets WHERE id = ?',
-      [ticket.id]
-    );
+    const updated = await updateTicket(ticket.id, {
+      checkin_status: 'checked',
+      checkin_time: now.toISOString()
+    });
 
     res.json({
       success: true,
       message: '報到成功',
-      ticket: updatedTicket
+      ticket: updated
     });
   } catch (error) {
     console.error('報到錯誤:', error);

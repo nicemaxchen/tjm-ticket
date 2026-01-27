@@ -1,7 +1,8 @@
 import express from 'express';
-import { dbRun, dbGet } from '../database/init.js';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
+import { createVerification, getLatestUnverified, markVerified } from '../db/smsVerifications.js';
+import { findAdminByUsername } from '../db/admins.js';
 
 const router = express.Router();
 
@@ -20,23 +21,21 @@ router.post('/sms/send', async (req, res) => {
     // 設定過期時間（10分鐘）
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // 儲存驗證碼到資料庫
-    await dbRun(
-      'INSERT INTO sms_verifications (phone, code, expires_at) VALUES (?, ?, ?)',
-      [phone, code, expiresAt.toISOString()]
-    );
+    // 儲存驗證碼到 Firestore
+    await createVerification({
+      phone,
+      code,
+      expires_at: expiresAt.toISOString()
+    });
 
     // 實際專案中這裡應該呼叫簡訊服務API
     console.log(`📱 簡訊驗證碼 [${phone}]: ${code} (過期時間: ${expiresAt})`);
 
-    // 開發/測試環境：總是返回驗證碼方便測試
-    // 如果 NODE_ENV 未設置，默認為開發環境
     const isDev = !process.env.NODE_ENV || process.env.NODE_ENV !== 'production';
     
     res.json({
       success: true,
       message: '驗證碼已發送',
-      // 開發環境回傳驗證碼，生產環境應移除
       code: isDev ? code : undefined
     });
   } catch (error) {
@@ -54,33 +53,21 @@ router.post('/sms/verify', async (req, res) => {
       return res.status(400).json({ error: '手機號和驗證碼不能為空' });
     }
 
-    // 查詢最新的驗證碼
-    const verification = await dbGet(
-      `SELECT * FROM sms_verifications 
-       WHERE phone = ? AND verified = 0 
-       ORDER BY created_at DESC LIMIT 1`,
-      [phone]
-    );
+    const verification = await getLatestUnverified(phone);
 
     if (!verification) {
       return res.status(400).json({ error: '驗證碼不存在或已使用' });
     }
 
-    // 檢查是否過期
     if (new Date(verification.expires_at) < new Date()) {
       return res.status(400).json({ error: '驗證碼已過期' });
     }
 
-    // 驗證碼比對
     if (verification.code !== code) {
       return res.status(400).json({ error: '驗證碼錯誤' });
     }
 
-    // 標記驗證碼為已使用
-    await dbRun(
-      'UPDATE sms_verifications SET verified = 1 WHERE id = ?',
-      [verification.id]
-    );
+    await markVerified(verification.id);
 
     res.json({
       success: true,
@@ -101,23 +88,17 @@ router.post('/admin/login', async (req, res) => {
       return res.status(400).json({ error: '使用者名稱和密碼不能為空' });
     }
 
-    const admin = await dbGet(
-      'SELECT * FROM admins WHERE username = ?',
-      [username]
-    );
+    const admin = await findAdminByUsername(username);
 
     if (!admin) {
       return res.status(401).json({ error: '使用者名稱或密碼錯誤' });
     }
 
-    // 驗證密碼（這裡簡化處理，實際應使用bcrypt）
-    // const isValid = await bcrypt.compare(password, admin.password);
-    // 開發環境簡化密碼驗證
+    // 目前資料中密碼是明文，暫維持原本邏輯
     if (admin.password !== password) {
       return res.status(401).json({ error: '使用者名稱或密碼錯誤' });
     }
 
-    // 產生token（簡化處理）
     const token = uuidv4();
 
     res.json({
