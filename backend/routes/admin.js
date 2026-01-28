@@ -477,6 +477,7 @@ router.post('/pending-list/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
     const { admin_id, admin_notes } = req.body;
+    const notes = admin_notes ?? '';
 
     // 取得待審核記錄
     const pending = await getPendingById(id);
@@ -517,7 +518,7 @@ router.post('/pending-list/:id/approve', async (req, res) => {
         status: 'approved',
         reviewed_by: admin_id || null,
         reviewed_at: new Date().toISOString(),
-        admin_notes
+        admin_notes: notes
       })
     ]);
 
@@ -537,6 +538,7 @@ router.post('/pending-list/:id/reject', async (req, res) => {
   try {
     const { id } = req.params;
     const { admin_id, admin_notes } = req.body;
+    const notes = admin_notes ?? '';
 
     const pending = await getPendingById(id);
 
@@ -549,7 +551,7 @@ router.post('/pending-list/:id/reject', async (req, res) => {
         status: 'rejected',
         reviewed_by: admin_id || null,
         reviewed_at: new Date().toISOString(),
-        admin_notes
+        admin_notes: notes
       }),
       updateRegistrationStatus(pending.registration_id, 'rejected')
     ]);
@@ -631,7 +633,8 @@ router.get('/statistics', async (req, res) => {
             user_name: user?.name || '',
             email: user?.email || '',
             organization_title: user?.organization_title || '',
-            registration_time: reg?.created_at || t.created_at
+            registration_time: reg?.created_at || t.created_at,
+            registration_status: reg?.status || ''
           };
         })
         .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
@@ -698,7 +701,8 @@ router.get('/statistics', async (req, res) => {
             user_name: user?.name || '',
             email: user?.email || '',
             organization_title: user?.organization_title || '',
-            registration_time: reg?.created_at || t.created_at
+            registration_time: reg?.created_at || t.created_at,
+            registration_status: reg?.status || ''
           };
         })
         .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
@@ -835,6 +839,132 @@ router.get('/statistics/by-events', async (req, res) => {
   } catch (error) {
     console.error('取得活動統計資訊錯誤:', error);
     res.status(500).json({ error: '取得失敗' });
+  }
+});
+
+// 更新單一票券（類別、報到狀態）
+router.put('/tickets/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { ticket_category_id, checkin_status, review_status } = req.body;
+
+    const ticketRef = firestore.collection('tickets').doc(String(id));
+    const ticketSnap = await ticketRef.get();
+
+    if (!ticketSnap.exists) {
+      return res.status(404).json({ error: '票券不存在' });
+    }
+
+    const ticketData = { id: ticketSnap.id, ...ticketSnap.data() };
+
+    const updateData = {};
+    if (ticket_category_id !== undefined) {
+      updateData.ticket_category_id = String(ticket_category_id);
+    }
+    if (checkin_status !== undefined) {
+      updateData.checkin_status = checkin_status === 'checked' ? 'checked' : 'unchecked';
+      if (updateData.checkin_status === 'checked') {
+        updateData.checkin_time = new Date().toISOString();
+      } else {
+        updateData.checkin_time = null;
+      }
+    }
+
+    await ticketRef.update(updateData);
+
+    // 同步更新報名審核狀態
+    if (review_status && ticketData.registration_id) {
+      if (review_status === 'pending') {
+        // 將報名改回審查中，並新增到待審查名單
+        const reg = await getRegistrationById(ticketData.registration_id);
+        if (reg) {
+          await updateRegistrationStatus(ticketData.registration_id, 'pending');
+
+          // 檢查是否已存在 pending 記錄，避免重複
+          const existingPendingSnap = await firestore
+            .collection('pending_list')
+            .where('registration_id', '==', String(ticketData.registration_id))
+            .where('status', '==', 'pending')
+            .limit(1)
+            .get();
+
+          if (existingPendingSnap.empty) {
+            let user = null;
+            if (reg.user_id) {
+              const userSnap = await firestore.collection('users').doc(String(reg.user_id)).get();
+              if (userSnap.exists) {
+                user = { id: userSnap.id, ...userSnap.data() };
+              }
+            }
+
+            await createPending({
+              registration_id: ticketData.registration_id,
+              name: user?.name || '',
+              email: user?.email || '',
+              phone: reg.phone,
+              organization_title: user?.organization_title || '',
+              event_id: reg.event_id,
+              ticket_category_id: reg.ticket_category_id,
+              status: 'pending'
+            });
+          }
+
+          // 將原本的票券刪除，避免日後再次審核時出現重複票券
+          await ticketRef.delete();
+        }
+      } else {
+        const normalized = review_status === 'rejected' ? 'rejected' : 'confirmed';
+        await updateRegistrationStatus(ticketData.registration_id, normalized);
+      }
+    }
+
+    const updatedSnap = await ticketRef.get();
+    const updatedTicket = { id: updatedSnap.id, ...updatedSnap.data() };
+
+    res.json({
+      success: true,
+      message: '票券更新成功',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('更新票券錯誤:', error);
+    res.status(500).json({ error: '更新失敗' });
+  }
+});
+
+// 刪除票券
+router.delete('/tickets/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 先依文件 ID 嘗試刪除
+    let ticketRef = firestore.collection('tickets').doc(String(id));
+    let ticketSnap = await ticketRef.get();
+
+    // 如果找不到，再用 token_id 搜尋
+    if (!ticketSnap.exists) {
+      const byToken = await firestore
+        .collection('tickets')
+        .where('token_id', '==', id)
+        .limit(1)
+        .get();
+
+      if (byToken.empty) {
+        return res.status(404).json({ error: '票券不存在' });
+      }
+
+      ticketRef = byToken.docs[0].ref;
+    }
+
+    await ticketRef.delete();
+
+    res.json({
+      success: true,
+      message: '票券刪除成功'
+    });
+  } catch (error) {
+    console.error('刪除票券錯誤:', error);
+    res.status(500).json({ error: '刪除失敗' });
   }
 });
 

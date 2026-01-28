@@ -52,7 +52,7 @@
           <el-input
             v-model="form.name"
             placeholder="請輸入姓名"
-            style="width: 300px"
+            style="width: 450px"
           />
         </el-form-item>
 
@@ -60,7 +60,7 @@
           <el-input
             v-model="form.organization_title"
             placeholder="選填，例：XX公司／工程師"
-            style="width: 300px"
+            style="width: 450px"
           />
         </el-form-item>
 
@@ -68,7 +68,7 @@
           <el-input
             v-model="form.email"
             placeholder="請輸入Email"
-            style="width: 300px"
+            style="width: 450px"
           />
         </el-form-item>
 
@@ -76,7 +76,7 @@
           <el-input
             v-model="form.phone"
             placeholder="請輸入手機號"
-            style="width: 300px"
+            style="width: 450px"
           />
         </el-form-item>
 
@@ -84,7 +84,7 @@
           <el-input
             v-model="form.code"
             placeholder="請輸入6位驗證碼"
-            style="width: 200px"
+            style="width: 300px"
             maxlength="6"
           />
           <el-button
@@ -299,7 +299,7 @@ const submitForm = async () => {
       setTimeout(() => {
         showSuccessDialog.value = false;
         goToHome();
-      }, 3000);
+      }, 10000);
     } catch (error) {
       ElMessage.error(error.message || '報名失敗');
     }
@@ -358,7 +358,7 @@ const formatEventLabel = (event) => {
 
 <style scoped>
 .register-form {
-  max-width: 700px;
+  max-width: 1050px;
   margin: 0 auto;
 }
 

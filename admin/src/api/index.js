@@ -66,5 +66,9 @@ export const adminApi = {
   getStatistics: (eventId) => api.get('/admin/statistics', { params: { event_id: eventId } }),
   getStatisticsByEvents: () => api.get('/admin/statistics/by-events'),
   getPhoneCounts: (eventId) =>
-    api.get('/admin/stats/phone-counts', { params: eventId ? { event_id: eventId } : {} })
+    api.get('/admin/stats/phone-counts', { params: eventId ? { event_id: eventId } : {} }),
+
+  // 票券管理
+  updateTicket: (id, data) => api.put(`/admin/tickets/${id}`, data),
+  deleteTicket: (id) => api.delete(`/admin/tickets/${id}`)
 };

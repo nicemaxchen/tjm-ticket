@@ -46,7 +46,52 @@
               <el-option label="未報到" value="unchecked" />
             </el-select>
           </div>
-        </div>
+  </div>
+
+  <!-- 票券編輯對話框 -->
+  <el-dialog
+    v-model="showEditDialog"
+    title="編輯票券"
+    width="500px"
+  >
+    <el-form label-width="100px">
+      <el-form-item label="票券類別">
+        <el-select
+          v-model="editForm.ticket_category_id"
+          placeholder="選擇票券類別"
+          style="width: 100%;"
+        >
+          <el-option
+            v-for="cat in editCategories"
+            :key="cat.id"
+            :label="cat.name"
+            :value="cat.id"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="報到狀態">
+        <el-radio-group v-model="editForm.checkin_status">
+          <el-radio label="unchecked">未報到</el-radio>
+          <el-radio label="checked">已報到</el-radio>
+        </el-radio-group>
+      </el-form-item>
+
+      <el-form-item label="審查狀態">
+        <el-radio-group v-model="editForm.review_status">
+          <el-radio label="confirmed">審核通過</el-radio>
+          <el-radio label="pending">審查中</el-radio>
+        </el-radio-group>
+      </el-form-item>
+    </el-form>
+
+    <template #footer>
+      <el-button @click="showEditDialog = false">取消</el-button>
+      <el-button type="primary" :loading="editLoading" @click="submitEdit">
+        儲存
+      </el-button>
+    </template>
+  </el-dialog>
       </template>
 
       <el-row :gutter="20" style="margin-bottom: 20px;">
@@ -207,7 +252,7 @@ import { adminApi } from '../api';
 const route = useRoute();
 const router = useRouter();
 const events = ref([]);
-const selectedEventId = ref(null);
+const selectedEventId = ref(null); // Firestore event id (string)
 const selectedEventName = ref('');
 const statistics = reactive({
   total: 0,
@@ -221,6 +266,15 @@ const pendingList = ref([]);
 const filterCategoryDetail = ref('');
 const filterCheckinStatus = ref('');
 const filterCategoryPending = ref('');
+const showEditDialog = ref(false);
+const editLoading = ref(false);
+const editCategories = ref([]);
+const editingTicket = ref(null);
+const editForm = reactive({
+  ticket_category_id: '',
+  checkin_status: 'unchecked',
+  review_status: 'confirmed'
+});
 
 const uniqueCategoriesTickets = computed(() => {
   const set = new Set();
@@ -239,7 +293,8 @@ const uniqueCategoriesPending = computed(() => {
 });
 
 const filteredTickets = computed(() => {
-  let list = tickets.value;
+  // 已開票列表不顯示審查中的報名
+  let list = tickets.value.filter((r) => r.registration_status !== 'pending');
   if (filterCategoryDetail.value) {
     list = list.filter((r) => r.category_name === filterCategoryDetail.value);
   }
@@ -276,10 +331,10 @@ onMounted(async () => {
   // 從 URL 參數中獲取 eventId
   const eventIdFromQuery = route.query.eventId;
   if (eventIdFromQuery) {
-    selectedEventId.value = Number(eventIdFromQuery);
+    selectedEventId.value = String(eventIdFromQuery);
   } else if (events.value.length > 0) {
     // 如果沒有指定活動，預設選擇第一個活動
-    selectedEventId.value = events.value[0].id;
+    selectedEventId.value = String(events.value[0].id);
     router.replace({
       path: '/statistics',
       query: { eventId: events.value[0].id.toString() }
@@ -293,7 +348,7 @@ onMounted(async () => {
 // 更新選中的活動名稱
 const updateSelectedEventName = () => {
   if (selectedEventId.value) {
-    const event = events.value.find(e => e.id === selectedEventId.value);
+    const event = events.value.find(e => String(e.id) === String(selectedEventId.value));
     selectedEventName.value = event ? event.name : '';
   } else {
     selectedEventName.value = '';
@@ -303,7 +358,7 @@ const updateSelectedEventName = () => {
 // 監聽路由變化，當 eventId 改變時重新載入統計
 watch(() => route.query.eventId, (newEventId) => {
   if (newEventId) {
-    const eventId = Number(newEventId);
+    const eventId = String(newEventId);
     if (selectedEventId.value !== eventId) {
       selectedEventId.value = eventId;
       updateSelectedEventName();
@@ -341,7 +396,7 @@ const handleEventChange = () => {
   if (selectedEventId.value) {
     router.replace({
       path: '/statistics',
-      query: { eventId: selectedEventId.value.toString() }
+      query: { eventId: String(selectedEventId.value) }
     });
     // 先清空列表，避免显示旧数据
     pendingList.value = [];
@@ -389,9 +444,39 @@ const loadPendingList = async () => {
   }
 };
 
-const handleEdit = (row) => {
-  // TODO: 實現編輯功能
-  ElMessage.info('編輯功能開發中');
+const handleEdit = async (row) => {
+  editingTicket.value = row;
+  editForm.ticket_category_id = row.ticket_category_id || '';
+  editForm.checkin_status = row.checkin_status || 'unchecked';
+  editForm.review_status = row.registration_status || 'confirmed';
+  showEditDialog.value = true;
+
+  try {
+    const res = await adminApi.getCategories(selectedEventId.value);
+    editCategories.value = res.categories || [];
+  } catch (error) {
+    console.error('載入類別失敗:', error);
+    editCategories.value = [];
+  }
+};
+
+const submitEdit = async () => {
+  if (!editingTicket.value) return;
+  editLoading.value = true;
+  try {
+    await adminApi.updateTicket(editingTicket.value.id, {
+      ticket_category_id: editForm.ticket_category_id || undefined,
+      checkin_status: editForm.checkin_status,
+      review_status: editForm.review_status
+    });
+    ElMessage.success('票券已更新');
+    showEditDialog.value = false;
+    await loadStatistics();
+  } catch (error) {
+    ElMessage.error(error.message || '更新失敗');
+  } finally {
+    editLoading.value = false;
+  }
 };
 
 const handleDelete = async (row) => {
@@ -402,12 +487,12 @@ const handleDelete = async (row) => {
       type: 'warning'
     });
     
-    // TODO: 實現刪除API
+    await adminApi.deleteTicket(row.id);
     ElMessage.success('刪除成功');
     await loadStatistics();
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('刪除失敗');
+      ElMessage.error(error.message || '刪除失敗');
     }
   }
 };

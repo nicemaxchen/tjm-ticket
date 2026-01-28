@@ -160,7 +160,7 @@
           />
         </el-form-item>
 
-        <el-form-item label="允許Web直接取票" prop="allow_web_collection">
+        <el-form-item label="是否開放取票" prop="allow_web_collection">
           <el-switch v-model="form.allow_web_collection" />
         </el-form-item>
       </el-form>
